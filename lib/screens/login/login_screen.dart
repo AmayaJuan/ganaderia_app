@@ -139,15 +139,39 @@ class _LoginScreenState extends State<LoginScreen> {
                           : const Text('Iniciar Sesión',
                               style: TextStyle(fontSize: 16)),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 20),                   
                       
-                                      
+                      // Usuarios de prueba
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Usuarios de prueba:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey,
+                                  fontSize: 12)),
+                            SizedBox(height: 6),
+                            Text('productor / productor123',
+                                style: TextStyle(fontSize: 11)),
+                            Text('admin / admin123',
+                                style: TextStyle(fontSize: 11)),
+                          ],
+                        ),
+                      ),
                   ]
                 )
               )
           )
         )
       ),
-    ),
+     ),
+    );
   }
 }

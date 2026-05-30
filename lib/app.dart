@@ -10,7 +10,7 @@ class GanaderiaApp extends StatelessWidget {
     return MaterialApp(
       title: 'GanaderíaApp',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,,
+      theme: AppTheme.light,
       initialRoute: AppRoutes.login,
       routes: AppRoutes.routes,
     );
