@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../routes/app_routes.dart';
 
@@ -11,6 +13,29 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   static const _green = Color(0xFF20A67A);
+  bool _isOnline = false; // Simulación de estado de conexión
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      if (mounted) {
+        setState(
+          () =>
+              _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isOnline = false);
+      }
+    }
+  }
 
   final List<_NavItem> _navItems = const [
     _NavItem(icon: Icons.home, label: 'Inicio'),
@@ -29,9 +54,10 @@ class _HomePageState extends State<HomePage> {
       body: Column(
         children: [
           // ── TopBar ──
-          _TopBar(isOnline: false),
+          _TopBar(isOnline: _isOnline, onTapWifi: _checkConnectivity),
+
           // ── Banner offline ──
-          _OfflineBanner(),
+          if (!_isOnline) _OfflineBanner(),
           // ── Cuerpo ──
           Expanded(
             child: isWide
@@ -74,7 +100,8 @@ class _HomePageState extends State<HomePage> {
 // ── TOP BAR ─────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final bool isOnline;
-  const _TopBar({required this.isOnline});
+  final VoidCallback onTapWifi;
+  const _TopBar({required this.isOnline, required this.onTapWifi});
 
   @override
   Widget build(BuildContext context) {
@@ -92,35 +119,39 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isOnline
-                  ? const Color(0xFFE1F5EE)
-                  : const Color(0xFFFCEBEB),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isOnline ? Icons.wifi : Icons.wifi_off,
-                  size: 16,
-                  color: isOnline
-                      ? const Color(0xFF20A67A)
-                      : const Color(0xFFA32D2D),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isOnline ? 'En línea' : 'Sin conexión',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+          InkWell(
+            onTap: onTapWifi,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isOnline
+                    ? const Color(0xFFE1F5EE)
+                    : const Color(0xFFFCEBEB),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isOnline ? Icons.wifi : Icons.wifi_off,
+                    size: 16,
                     color: isOnline
                         ? const Color(0xFF20A67A)
                         : const Color(0xFFA32D2D),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Text(
+                    isOnline ? 'En línea' : 'Sin conexión',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isOnline
+                          ? const Color(0xFF20A67A)
+                          : const Color(0xFFA32D2D),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
