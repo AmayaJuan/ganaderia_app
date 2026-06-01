@@ -66,12 +66,9 @@ class _HomePageState extends State<HomePage> {
                       _Sidebar(
                         items: _navItems,
                         selected: _selectedIndex,
-                        onSelect: (i) {
-                          setState(() => _selectedIndex = i);
-                          if (i == 1) Navigator.pushNamed(context, AppRoutes.lotes);
-                        },
+                        onSelect: (i) => setState(() => _selectedIndex = i),
                       ),
-                      Expanded(child: _DashboardBody()),
+                      Expanded(child: _getBody(_selectedIndex)),
                     ],
                   )
                 : _DashboardBody(),
@@ -97,6 +94,23 @@ class _HomePageState extends State<HomePage> {
                   .toList(),
             ),
     );
+  }
+
+  Widget _getBody(int index) {
+    switch (index) {
+      case 0:
+        return _DashboardBody();
+      case 1:
+        return const _LotesBody();
+      case 2:
+        return const Center(child: Text('Registro de Animales - próximamente'));
+      case 3:
+        return const Center(child: Text('Control Sanitario - próximamente'));
+      case 4:
+        return const Center(child: Text('Reportes - próximamente'));
+      default:
+        return _DashboardBody();
+    }
   }
 }
 
@@ -769,4 +783,363 @@ class _NavItem {
   final IconData icon;
   final String label;
   const _NavItem({required this.icon, required this.label});
+}
+
+// ── LOTES BODY ───────────────────────────────────────
+class _LoteModel {
+  final String id;
+  String nombre;
+  String descripcion;
+  int animales;
+
+  _LoteModel({
+    required this.id,
+    required this.nombre,
+    required this.descripcion,
+  }) : animales = 0;
+}
+
+class _LotesBody extends StatefulWidget {
+  const _LotesBody();
+
+  @override
+  State<_LotesBody> createState() => _LotesBodyState();
+}
+
+class _LotesBodyState extends State<_LotesBody> {
+  static const _green = Color(0xFF20A67A);
+  final List<_LoteModel> _lotes = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Encabezado
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Gestión de Lotes',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF20A67A))),
+                  Text('Administre las áreas de pastoreo',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Nuevo Lote'),
+                onPressed: () => _mostrarFormulario(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Lista
+          Expanded(
+            child: _lotes.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE1F5EE),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.grass,
+                              size: 48, color: Color(0xFF20A67A)),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('No hay lotes registrados',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        const Text(
+                            'Crea tu primer lote para organizar el ganado',
+                            style: TextStyle(
+                                color: Colors.grey, fontSize: 13)),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _green,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Crear primer lote'),
+                          onPressed: () => _mostrarFormulario(),
+                        ),
+                      ],
+                    ),
+                  )
+                : GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.2,
+                    ),
+                    itemCount: _lotes.length,
+                    itemBuilder: (ctx, i) {
+                      final lote = _lotes[i];
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE1F5EE),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.grass,
+                                      color: Color(0xFF20A67A), size: 20),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(Icons.edit,
+                                      color: Color(0xFF185FA5), size: 18),
+                                  onPressed: () =>
+                                      _mostrarFormulario(lote: lote),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red, size: 18),
+                                  onPressed: () =>
+                                      _confirmarEliminar(lote),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(lote.nombre,
+                                style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold)),
+                            if (lote.descripcion.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(lote.descripcion,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis),
+                            ],
+                            const Spacer(),
+                            Row(
+                              children: [
+                                const Icon(Icons.pets,
+                                    size: 14, color: Colors.grey),
+                                const SizedBox(width: 4),
+                                Text('${lote.animales} animales',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.grey)),
+                                const Spacer(),
+                                const Text('Ver animales',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF20A67A),
+                                        fontWeight: FontWeight.bold)),
+                                const Icon(Icons.keyboard_arrow_down,
+                                    color: Color(0xFF20A67A), size: 16),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarFormulario({_LoteModel? lote}) {
+    final nombreCtrl =
+        TextEditingController(text: lote?.nombre ?? '');
+    final descCtrl =
+        TextEditingController(text: lote?.descripcion ?? '');
+    final formKey = GlobalKey<FormState>();
+    final esEdicion = lote != null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(esEdicion ? Icons.edit : Icons.add_circle,
+                color: const Color(0xFF20A67A)),
+            const SizedBox(width: 8),
+            Text(esEdicion ? 'Editar Lote' : 'Nuevo Lote'),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nombreCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del lote *',
+                    hintText: 'Ej: Lote Norte',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  validator: (v) => v!.trim().isEmpty
+                      ? 'El nombre es obligatorio'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Descripción',
+                    hintText: 'Ej: Área de pastoreo rotativo',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar',
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF20A67A),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              if (!formKey.currentState!.validate()) return;
+              setState(() {
+                if (esEdicion) {
+                  lote.nombre = nombreCtrl.text.trim();
+                  lote.descripcion = descCtrl.text.trim();
+                } else {
+                  _lotes.add(_LoteModel(
+                    id: DateTime.now()
+                        .millisecondsSinceEpoch
+                        .toString(),
+                    nombre: nombreCtrl.text.trim(),
+                    descripcion: descCtrl.text.trim(),
+                  ));
+                }
+              });
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      esEdicion ? 'Lote actualizado' : 'Lote creado'),
+                  backgroundColor: const Color(0xFF20A67A),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            },
+            child:
+                Text(esEdicion ? 'Guardar cambios' : 'Crear lote'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmarEliminar(_LoteModel lote) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Eliminar lote'),
+          ],
+        ),
+        content: Text(
+            '¿Estás seguro de eliminar "${lote.nombre}"?\n'
+            'Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              setState(() => _lotes.remove(lote));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Lote eliminado'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
 }
