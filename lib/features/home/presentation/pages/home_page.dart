@@ -810,185 +810,188 @@ class _LotesBodyState extends State<_LotesBody> {
   static const _green = Color(0xFF20A67A);
   final List<_LoteModel> _lotes = [];
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Encabezado
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Gestión de Lotes',
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF20A67A))),
-                  Text('Administre las áreas de pastoreo',
-                      style: TextStyle(color: Colors.grey, fontSize: 13)),
-                ],
+   @override
+Widget build(BuildContext context) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Encabezado
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Gestión de Lotes',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF20A67A))),
+                Text('Administre las áreas de pastoreo',
+                    style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ],
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo Lote'),
-                onPressed: () => _mostrarFormulario(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Lista
-          Expanded(
-            child: _lotes.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE1F5EE),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.grass,
-                              size: 48, color: Color(0xFF20A67A)),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text('No hay lotes registrados',
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        const Text(
-                            'Crea tu primer lote para organizar el ganado',
-                            style: TextStyle(
-                                color: Colors.grey, fontSize: 13)),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _green,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Crear primer lote'),
-                          onPressed: () => _mostrarFormulario(),
-                        ),
-                      ],
-                    ),
-                  )
-                : GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.2,
-                    ),
-                    itemCount: _lotes.length,
-                    itemBuilder: (ctx, i) {
-                      final lote = _lotes[i];
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2)),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE1F5EE),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(Icons.grass,
-                                      color: Color(0xFF20A67A), size: 20),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(Icons.edit,
-                                      color: Color(0xFF185FA5), size: 18),
-                                  onPressed: () =>
-                                      _mostrarFormulario(lote: lote),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.delete,
-                                      color: Colors.red, size: 18),
-                                  onPressed: () =>
-                                      _confirmarEliminar(lote),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(lote.nombre,
-                                style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold)),
-                            if (lote.descripcion.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(lote.descripcion,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis),
-                            ],
-                            const Spacer(),
-                            Row(
-                              children: [
-                                const Icon(Icons.pets,
-                                    size: 14, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Text('${lote.animales} animales',
-                                    style: const TextStyle(
-                                        fontSize: 12, color: Colors.grey)),
-                                const Spacer(),
-                                const Text('Ver animales',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: Color(0xFF20A67A),
-                                        fontWeight: FontWeight.bold)),
-                                const Icon(Icons.keyboard_arrow_down,
-                                    color: Color(0xFF20A67A), size: 16),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo Lote'),
+              onPressed: () => _mostrarFormulario(),
+            ),
+          ],
+        ),
       ),
-    );
+      const SizedBox(height: 20),
+
+      // Lista
+      Expanded(
+        child: _lotes.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE1F5EE),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.grass,
+                          size: 48, color: Color(0xFF20A67A)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('No hay lotes registrados',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Crea tu primer lote para organizar el ganado',
+                        style:
+                            TextStyle(color: Colors.grey, fontSize: 13)),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Crear primer lote'),
+                      onPressed: () => _mostrarFormulario(),
+                    ),
+                  ],
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GridView.builder(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.2,
+                  ),
+                  itemCount: _lotes.length,
+                  itemBuilder: (ctx, i) {
+                    final lote = _lotes[i];
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE1F5EE),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.grass,
+                                    color: Color(0xFF20A67A), size: 20),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.edit,
+                                    color: Color(0xFF185FA5), size: 18),
+                                onPressed: () =>
+                                    _mostrarFormulario(lote: lote),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete,
+                                    color: Colors.red, size: 18),
+                                onPressed: () =>
+                                    _confirmarEliminar(lote),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(lote.nombre,
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold)),
+                          if (lote.descripcion.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(lote.descripcion,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                          const Spacer(),
+                          Row(
+                            children: [
+                              const Icon(Icons.pets,
+                                  size: 14, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text('${lote.animales} animales',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey)),
+                              const Spacer(),
+                              const Text('Ver animales',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF20A67A),
+                                      fontWeight: FontWeight.bold)),
+                              const Icon(Icons.keyboard_arrow_down,
+                                  color: Color(0xFF20A67A), size: 16),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+      ),
+    ],
+  );
   }
 
   void _mostrarFormulario({_LoteModel? lote}) {
