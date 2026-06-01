@@ -66,7 +66,10 @@ class _HomePageState extends State<HomePage> {
                       _Sidebar(
                         items: _navItems,
                         selected: _selectedIndex,
-                        onSelect: (i) => setState(() => _selectedIndex = i),
+                        onSelect: (i) {
+                          setState(() => _selectedIndex = i);
+                          if (i == 1) Navigator.pushNamed(context, AppRoutes.lotes);
+                        },
                       ),
                       Expanded(child: _DashboardBody()),
                     ],
