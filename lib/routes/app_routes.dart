@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import '../screens/login/login_screen.dart';
 import '../features/home/presentation/pages/home_page.dart';
 import '../features/animals/presentation/pages/animals_page.dart';
+import '../features/lotes/presentation/pages/lotes_page.dart';
 
 class AppRoutes {
   static const String login = '/login';
   static const String home = '/home';
+  static const String lotes = '/lotes';
   static const String animals = '/animals';
 
   static Map<String, WidgetBuilder> get routes => {
     login: (_) => const LoginScreen(),
     home: (_) => const HomePage(),
+    lotes: (_) => const LotesPage(),
     animals: (_) => const AnimalsPage(),
   };
 }
