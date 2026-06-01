@@ -6,11 +6,12 @@ import 'package:flutter/material.dart';
 import '../../../../core/connectivity/connectivity_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../animals/presentation/pages/animals_page.dart';
-import '../../../health/presentation/pages/health_page.dart';
 import '../../../lotes/presentation/pages/lotes_page.dart';
 import '../../../reports/presentation/pages/reports_page.dart';
+import '../../../weight/presentation/pages/weight_page.dart';
 import '../models/nav_item.dart';
 import '../widgets/dashboard_body.dart';
+import '../widgets/dev_fab_stack.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/top_bar.dart';
@@ -33,7 +34,7 @@ class _HomePageState extends State<HomePage> {
     NavItem(icon: Icons.home, label: 'Inicio'),
     NavItem(icon: Icons.grid_view, label: 'Gestión de Lotes'),
     NavItem(icon: Icons.pets, label: 'Registro de Animales'),
-    NavItem(icon: Icons.medical_services, label: 'Control Sanitario'),
+    NavItem(icon: Icons.monitor_weight, label: 'Registro de Peso'),
     NavItem(icon: Icons.bar_chart, label: 'Reportes'),
   ];
 
@@ -182,6 +183,8 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: const DevFabStack(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(
         children: [
           TopBar(isOnline: _isOnline, onTapWifi: _onTapConnectivity),
@@ -231,7 +234,7 @@ class _HomePageState extends State<HomePage> {
       case 2:
         return const AnimalsPage();
       case 3:
-        return const HealthPage();
+        return const WeightPage();
       case 4:
         return const ReportsPage();
       default:
