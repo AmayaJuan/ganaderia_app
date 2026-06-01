@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-
+import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../routes/app_routes.dart';
 
 class HomePage extends StatefulWidget {
@@ -13,26 +17,190 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   static const _green = Color(0xFF20A67A);
-  bool _isOnline = false; // Simulación de estado de conexión
+  bool _isOnline = false;
+  bool _simulateOffline = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _connectivityDebounce;
 
   @override
   void initState() {
     super.initState();
-    _checkConnectivity();
+    _refreshConnectivity(showFeedback: false);
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen((_) {
+      _connectivityDebounce?.cancel();
+      _connectivityDebounce = Timer(
+        const Duration(milliseconds: 500),
+        () => _refreshConnectivity(showFeedback: true),
+      );
+    });
   }
 
-  Future<void> _checkConnectivity() async {
+  @override
+  void dispose() {
+    _connectivityDebounce?.cancel();
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
+
+  Future<bool> _hasInternetAccess() async {
+    // En Windows algunas redes bloquean generate_204; usamos varios checks.
     try {
-      final result = await InternetAddress.lookup('google.com');
-      if (mounted) {
-        setState(
-          () =>
-              _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty,
+      final dnsGoogle = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 3));
+      if (dnsGoogle.isNotEmpty && dnsGoogle.first.rawAddress.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      final dnsCloudflare = await InternetAddress.lookup(
+        'one.one.one.one',
+      ).timeout(const Duration(seconds: 3));
+      if (dnsCloudflare.isNotEmpty &&
+          dnsCloudflare.first.rawAddress.isNotEmpty) {
+        return true;
+      }
+    } catch (_) {}
+
+    try {
+      final uri = Uri.parse('https://clients3.google.com/generate_204');
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 3));
+      return response.statusCode == 204 || response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _refreshConnectivity({required bool showFeedback}) async {
+    if (_simulateOffline) {
+      if (!mounted) return;
+      final changed = _isOnline;
+      setState(() => _isOnline = false);
+      if (showFeedback) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Modo simulacion offline activo.'),
+            backgroundColor: Color(0xFF7A4500),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isOnline = false);
+      if (changed) return;
+      return;
+    }
+
+    final connectivityResults = await Connectivity().checkConnectivity();
+    final hasNetworkInterface = connectivityResults
+        .any((result) => result != ConnectivityResult.none);
+    final newOnlineState =
+        hasNetworkInterface && await _hasInternetAccess();
+
+    if (!mounted) return;
+
+    final changed = _isOnline != newOnlineState;
+    setState(() => _isOnline = newOnlineState);
+
+    if (!showFeedback) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          changed
+              ? (newOnlineState
+                  ? 'Conexion restablecida. Sincronizando datos locales.'
+                  : 'Sin conexion. La app seguira funcionando en modo offline.')
+              : (newOnlineState
+                  ? 'Ya estas en linea.'
+                  : 'Sigues sin conexion. Revisa tu red e intenta de nuevo.'),
+        ),
+        backgroundColor: newOnlineState
+            ? const Color(0xFF20A67A)
+            : const Color(0xFF7A4500),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _onTapConnectivity() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Conectividad',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Reintentar conexion'),
+                subtitle: const Text('Verifica internet real en este equipo'),
+                onTap: () => Navigator.pop(ctx, 'retry'),
+              ),
+              ListTile(
+                leading: Icon(
+                  _simulateOffline ? Icons.wifi : Icons.wifi_off,
+                  color: const Color(0xFF7A4500),
+                ),
+                title: Text(
+                  _simulateOffline
+                      ? 'Desactivar simulacion offline'
+                      : 'Simular sin conexion',
+                ),
+                subtitle: const Text(
+                  'Para pruebas mientras no hay red disponible',
+                ),
+                onTap: () => Navigator.pop(ctx, 'toggle_sim'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+
+    if (action == 'retry') {
+      await _refreshConnectivity(showFeedback: true);
+      return;
+    }
+
+    if (action == 'toggle_sim') {
+      setState(() {
+        _simulateOffline = !_simulateOffline;
+        if (_simulateOffline) _isOnline = false;
+      });
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            _simulateOffline
+                ? 'Simulacion offline activada.'
+                : 'Simulacion offline desactivada.',
+          ),
+          backgroundColor: _simulateOffline
+              ? const Color(0xFF7A4500)
+              : const Color(0xFF20A67A),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (!_simulateOffline) {
+        await _refreshConnectivity(showFeedback: true);
       }
     }
   }
@@ -54,10 +222,14 @@ class _HomePageState extends State<HomePage> {
       body: Column(
         children: [
           // ── TopBar ──
-          _TopBar(isOnline: _isOnline, onTapWifi: _checkConnectivity),
+          _TopBar(
+            isOnline: _isOnline,
+            simulateOffline: _simulateOffline,
+            onTapWifi: _onTapConnectivity,
+          ),
 
           // ── Banner offline ──
-          if (!_isOnline) _OfflineBanner(),
+          if (!_isOnline) _OfflineBanner(simulated: _simulateOffline),
           // ── Cuerpo ──
           Expanded(
             child: isWide
@@ -71,7 +243,10 @@ class _HomePageState extends State<HomePage> {
                       Expanded(child: _getBody(_selectedIndex)),
                     ],
                   )
-                : _DashboardBody(),
+                : _DashboardBody(
+                    onQuickAction: (index) =>
+                        setState(() => _selectedIndex = index),
+                  ),
           ),
         ],
       ),
@@ -99,26 +274,291 @@ class _HomePageState extends State<HomePage> {
   Widget _getBody(int index) {
     switch (index) {
       case 0:
-        return _DashboardBody();
+        return _DashboardBody(
+          onQuickAction: (index) => setState(() => _selectedIndex = index),
+        );
       case 1:
         return const _LotesBody();
       case 2:
-        return const Center(child: Text('Registro de Animales - próximamente'));
+        return const _AnimalsBody();
       case 3:
-        return const Center(child: Text('Control Sanitario - próximamente'));
+        return const _HealthBody();
       case 4:
-        return const Center(child: Text('Reportes - próximamente'));
+        return const _ReportsBody();
       default:
-        return _DashboardBody();
+        return _DashboardBody(
+          onQuickAction: (index) => setState(() => _selectedIndex = index),
+        );
     }
+  }
+}
+
+class _AnimalsBody extends StatelessWidget {
+  const _AnimalsBody();
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [
+      ('#1', 'Brahman', 'Macho', '3 anios', 'Lote Norte', '420 kg'),
+      ('#2', 'Cebu', 'Hembra', '3 anios', 'Lote Sur', '375 kg'),
+      ('#3', 'Angus', 'Macho', '2 anios', 'Lote Este', '342 kg'),
+    ];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Registro de Animales',
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF20A67A),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Gestione el inventario bovino',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.add),
+                label: const Text('Nuevo Animal'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Buscar por raza o lote...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('ID')),
+                  DataColumn(label: Text('Raza')),
+                  DataColumn(label: Text('Sexo')),
+                  DataColumn(label: Text('Edad')),
+                  DataColumn(label: Text('Lote')),
+                  DataColumn(label: Text('Peso Actual')),
+                ],
+                rows: rows
+                    .map(
+                      (r) => DataRow(
+                        cells: [
+                          DataCell(Text(r.$1)),
+                          DataCell(Text(r.$2)),
+                          DataCell(Text(r.$3)),
+                          DataCell(Text(r.$4)),
+                          DataCell(Text(r.$5)),
+                          DataCell(Text(r.$6)),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthBody extends StatelessWidget {
+  const _HealthBody();
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = [
+      ('Cebu #2', 'Perdida de peso detectada'),
+      ('Brahman #1', 'Vacuna pendiente'),
+      ('Angus #3', 'Control sanitario atrasado'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Control Sanitario',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF20A67A),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Alertas y seguimientos del estado de salud',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.separated(
+              itemCount: alerts.length,
+              separatorBuilder: (_, index) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final item = alerts[index];
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE7D5A0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber, color: Color(0xFF9A6A00)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${item.$1}: ${item.$2}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {},
+                        child: const Text('Ver historial'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportsBody extends StatelessWidget {
+  const _ReportsBody();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget reportCard({
+      required String title,
+      required String subtitle,
+      required bool active,
+    }) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF20A67A) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE6E6E6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.insert_chart_outlined,
+                color: active ? Colors.white : const Color(0xFF20A67A),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: active ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: active ? Colors.white70 : Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Reportes',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF20A67A),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Analisis y estadisticas del ganado',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              reportCard(
+                title: 'Reporte de Peso',
+                subtitle: 'Analisis de peso promedio por lote',
+                active: true,
+              ),
+              const SizedBox(width: 12),
+              reportCard(
+                title: 'Reporte Sanitario',
+                subtitle: 'Vacunas y tratamientos aplicados',
+                active: false,
+              ),
+              const SizedBox(width: 12),
+              reportCard(
+                title: 'Inventario General',
+                subtitle: 'Distribucion por raza y lote',
+                active: false,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
 // ── TOP BAR ─────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final bool isOnline;
+  final bool simulateOffline;
   final VoidCallback onTapWifi;
-  const _TopBar({required this.isOnline, required this.onTapWifi});
+  const _TopBar({
+    required this.isOnline,
+    required this.simulateOffline,
+    required this.onTapWifi,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +598,9 @@ class _TopBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    isOnline ? 'En línea' : 'Sin conexión',
+                    isOnline
+                        ? 'En línea'
+                        : 'Sin conexión',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -179,21 +621,27 @@ class _TopBar extends StatelessWidget {
 
 // ── BANNER OFFLINE ───────────────────────────────────
 class _OfflineBanner extends StatelessWidget {
+  final bool simulated;
+  const _OfflineBanner({this.simulated = false});
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       color: const Color(0xFF7A4500),
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.warning_amber, color: Colors.white, size: 16),
-          SizedBox(width: 8),
+          const Icon(Icons.warning_amber, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Sin conexión a internet. Los datos se guardarán localmente '
-              'y se sincronizarán automáticamente al reconectar.',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+              simulated
+                  ? 'Modo sin conexion simulado activo. Los datos se guardan localmente '
+                      'mientras pruebas el flujo offline.'
+                  : 'Sin conexión a internet. Los datos se guardarán localmente '
+                      'y se sincronizarán automáticamente al reconectar.',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ),
         ],
@@ -293,6 +741,10 @@ class _Sidebar extends StatelessWidget {
 
 // ── DASHBOARD BODY ───────────────────────────────────
 class _DashboardBody extends StatelessWidget {
+  final ValueChanged<int> onQuickAction;
+
+  const _DashboardBody({required this.onQuickAction});
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -586,7 +1038,7 @@ class _DashboardBody extends StatelessWidget {
                   icon: Icons.add,
                   label: 'Registrar Animal',
                   color: const Color(0xFF20A67A),
-                  onTap: () {},
+                  onTap: () => onQuickAction(2),
                 ),
               ),
               const SizedBox(width: 10),
@@ -595,7 +1047,7 @@ class _DashboardBody extends StatelessWidget {
                   icon: Icons.monitor_weight,
                   label: 'Registrar Peso',
                   color: const Color(0xFF20A67A),
-                  onTap: () {},
+                  onTap: () => onQuickAction(3),
                 ),
               ),
               const SizedBox(width: 10),
@@ -604,7 +1056,7 @@ class _DashboardBody extends StatelessWidget {
                   icon: Icons.grid_view,
                   label: 'Gestionar Lotes',
                   color: const Color(0xFF185FA5),
-                  onTap: () {},
+                  onTap: () => onQuickAction(1),
                 ),
               ),
               const SizedBox(width: 10),
@@ -613,7 +1065,7 @@ class _DashboardBody extends StatelessWidget {
                   icon: Icons.bar_chart,
                   label: 'Ver Reportes',
                   color: const Color(0xFF7A4500),
-                  onTap: () {},
+                  onTap: () => onQuickAction(4),
                 ),
               ),
             ],
@@ -796,7 +1248,26 @@ class _LoteModel {
     required this.id,
     required this.nombre,
     required this.descripcion,
-  }) : animales = 0;
+    this.animales = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'nombre': nombre,
+        'descripcion': descripcion,
+        'animales': animales,
+      };
+
+  factory _LoteModel.fromJson(Map<String, dynamic> json) {
+    return _LoteModel(
+      id: (json['id'] ?? '').toString(),
+      nombre: (json['nombre'] ?? '').toString(),
+      descripcion: (json['descripcion'] ?? '').toString(),
+      animales: json['animales'] is int
+          ? json['animales'] as int
+          : int.tryParse('${json['animales']}') ?? 0,
+    );
+  }
 }
 
 class _LotesBody extends StatefulWidget {
@@ -808,10 +1279,59 @@ class _LotesBody extends StatefulWidget {
 
 class _LotesBodyState extends State<_LotesBody> {
   static const _green = Color(0xFF20A67A);
+  static const _storageKey = 'home_lotes_v1';
   final List<_LoteModel> _lotes = [];
+  bool _isLoading = true;
 
-   @override
-Widget build(BuildContext context) {
+  @override
+  void initState() {
+    super.initState();
+    _loadLotes();
+  }
+
+  Future<void> _loadLotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storageKey);
+    if (!mounted) return;
+
+    if (raw == null || raw.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        final parsed = decoded
+            .whereType<Map>()
+            .map((item) => _LoteModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        setState(() {
+          _lotes
+            ..clear()
+            ..addAll(parsed);
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (_) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _saveLotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = jsonEncode(_lotes.map((l) => l.toJson()).toList());
+    await prefs.setString(_storageKey, raw);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+  if (_isLoading) {
+    return const Center(child: CircularProgressIndicator());
+  }
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1064,10 +1584,11 @@ Widget build(BuildContext context) {
             ),
             onPressed: () {
               if (!formKey.currentState!.validate()) return;
+              final loteActual = lote;
               setState(() {
-                if (esEdicion) {
-                  lote.nombre = nombreCtrl.text.trim();
-                  lote.descripcion = descCtrl.text.trim();
+                if (esEdicion && loteActual != null) {
+                  loteActual.nombre = nombreCtrl.text.trim();
+                  loteActual.descripcion = descCtrl.text.trim();
                 } else {
                   _lotes.add(_LoteModel(
                     id: DateTime.now()
@@ -1078,6 +1599,7 @@ Widget build(BuildContext context) {
                   ));
                 }
               });
+              unawaited(_saveLotes());
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -1128,6 +1650,7 @@ Widget build(BuildContext context) {
             ),
             onPressed: () {
               setState(() => _lotes.remove(lote));
+              unawaited(_saveLotes());
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
