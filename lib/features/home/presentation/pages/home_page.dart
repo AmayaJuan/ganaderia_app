@@ -14,7 +14,6 @@ import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../weight/presentation/pages/weight_page.dart';
 import '../models/nav_item.dart';
 import '../widgets/dashboard_body.dart';
-import '../widgets/dev_fab_stack.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/top_bar.dart';
@@ -192,8 +191,6 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: const DevFabStack(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Column(
         children: [
           TopBar(isOnline: _isOnline, onTapWifi: _onTapConnectivity),

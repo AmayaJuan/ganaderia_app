@@ -15,8 +15,6 @@ class _SettingsPageState extends State<SettingsPage> {
   final _auth = AuthService.instance;
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  UserRole _newUserRole = UserRole.productor;
-
   @override
   void dispose() {
     _usernameCtrl.dispose();
@@ -28,7 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final error = await _auth.createUser(
       username: _usernameCtrl.text,
       password: _passwordCtrl.text,
-      role: _newUserRole,
+      role: UserRole.productor,
     );
 
     if (!mounted) return;
@@ -154,7 +152,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<UserRole>(
-                    value: _newUserRole,
+                    initialValue: UserRole.productor,
                     decoration: const InputDecoration(
                       labelText: 'Rol del usuario',
                     ),
@@ -164,9 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: Text('Productor'),
                       ),
                     ],
-                    onChanged: (v) {
-                      if (v != null) setState(() => _newUserRole = v);
-                    },
+                    onChanged: (_) {},
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
