@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../routes/app_routes.dart';
+import '../../../../services/auth_service.dart';
 import '../models/nav_item.dart';
 
 class Sidebar extends StatelessWidget {
@@ -64,8 +65,11 @@ class Sidebar extends StatelessWidget {
           }),
           const Spacer(),
           GestureDetector(
-            onTap: () =>
-                Navigator.pushReplacementNamed(context, AppRoutes.login),
+            onTap: () async {
+              await AuthService.instance.logout();
+              if (!context.mounted) return;
+              Navigator.pushReplacementNamed(context, AppRoutes.login);
+            },
             child: Container(
               margin: const EdgeInsets.all(8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

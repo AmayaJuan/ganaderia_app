@@ -8,6 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../animals/presentation/pages/animals_page.dart';
 import '../../../lotes/presentation/pages/lotes_page.dart';
 import '../../../reports/presentation/pages/reports_page.dart';
+import '../../../../routes/app_routes.dart';
+import '../../../../services/auth_service.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../weight/presentation/pages/weight_page.dart';
 import '../models/nav_item.dart';
 import '../widgets/dashboard_body.dart';
@@ -36,11 +39,17 @@ class _HomePageState extends State<HomePage> {
     NavItem(icon: Icons.pets, label: 'Registro de Animales'),
     NavItem(icon: Icons.monitor_weight, label: 'Registro de Peso'),
     NavItem(icon: Icons.bar_chart, label: 'Reportes'),
+    NavItem(icon: Icons.settings, label: 'Configuración'),
   ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!AuthService.instance.isLoggedIn && mounted) {
+        Navigator.pushReplacementNamed(context, AppRoutes.login);
+      }
+    });
     _refreshConnectivity(showFeedback: false);
     _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
       _connectivityDebounce?.cancel();
@@ -237,6 +246,8 @@ class _HomePageState extends State<HomePage> {
         return const WeightPage();
       case 4:
         return const ReportsPage();
+      case 5:
+        return const SettingsPage();
       default:
         return DashboardBody(onQuickAction: _onQuickAction);
     }

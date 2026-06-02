@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/ganaderia_logo.dart';
@@ -11,7 +13,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final authService = AuthService();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool obscurePassword = true;
@@ -36,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => isLoading = true);
     try {
-      final success = await authService.login(username, password);
+      final success = await AuthService.instance.login(username, password);
       if (!mounted) return;
       if (success) {
         Navigator.pushReplacementNamed(context, AppRoutes.home);
@@ -50,14 +51,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: const Color(0xFFA32D2D)),
+      SnackBar(content: Text(msg), backgroundColor: AppColors.red),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -82,20 +83,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const GanaderiaLogo(size: 90),
                     const SizedBox(height: 20),
-                    const Text('GanaderiaApp',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF20A67A),
-                        )),
+                    const Text(
+                      'GanaderiaApp',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.green,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    const Text('Sistema de Gestión Ganadera',
-                        style: TextStyle(color: Colors.grey, fontSize: 14)),
-                    const Text('Urabá Antioqueño, Colombia',
-                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const Text(
+                      'Sistema de Gestión Ganadera',
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                    const Text(
+                      'Urabá Antioqueño, Colombia',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
                     const SizedBox(height: 32),
-
-                    // Usuario
                     TextField(
                       controller: _usernameController,
                       textInputAction: TextInputAction.next,
@@ -106,8 +111,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Contraseña
                     TextField(
                       controller: _passwordController,
                       obscureText: obscurePassword,
@@ -118,60 +121,44 @@ class _LoginScreenState extends State<LoginScreen> {
                         hintText: 'Ingresa tu contraseña',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          icon: Icon(obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off),
-                          onPressed: () => setState(() =>
-                            obscurePassword = !obscurePassword),
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () => setState(
+                            () => obscurePassword = !obscurePassword,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Botón
-                    ElevatedButton(
-                      onPressed: isLoading ? null : onLogin,
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 22, height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                          : const Text('Iniciar Sesión',
-                              style: TextStyle(fontSize: 16)),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : onLogin,
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Iniciar Sesión',
+                                style: TextStyle(fontSize: 16),
+                              ),
                       ),
-                      const SizedBox(height: 20),                   
-                      
-                      // Usuarios de prueba
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Usuarios de prueba:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                  fontSize: 12)),
-                            SizedBox(height: 6),
-                            Text('productor / productor123',
-                                style: TextStyle(fontSize: 11)),
-                            Text('admin / admin123',
-                                style: TextStyle(fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                  ]
-                )
-              )
-          )
-        )
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
-     ),
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'routes/app_routes.dart';
+
 import 'core/theme/app_theme.dart';
+import 'routes/app_routes.dart';
+import 'services/auth_service.dart';
 
 class GanaderiaApp extends StatelessWidget {
   const GanaderiaApp({super.key});
@@ -11,7 +13,9 @@ class GanaderiaApp extends StatelessWidget {
       title: 'GanaderíaApp',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      initialRoute: AppRoutes.login,
+      initialRoute: AuthService.instance.isLoggedIn
+          ? AppRoutes.home
+          : AppRoutes.login,
       routes: AppRoutes.routes,
     );
   }
