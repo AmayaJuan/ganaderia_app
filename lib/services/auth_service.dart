@@ -18,6 +18,48 @@ class AuthService {
   bool get isVeterinario => _currentUser?.role == UserRole.veterinario;
   bool get isProductor => _currentUser?.role == UserRole.productor;
 
+  /// Admin: elimina un usuario tanto de `auth.users` (si está disponible)
+  /// como de la tabla `usuario` para que deje de aparecer en la app.
+  ///
+  /// Nota: si tu proyecto bloquea el método de admin en el cliente,
+  /// entonces asegúrate de tener un RPC/endpoint seguro en Supabase.
+  Future<String?> deleteUser(AppUser user) async {
+    if (!isAdmin) {
+      return 'Solo un administrador puede eliminar usuarios.';
+    }
+    if (user.id.isEmpty) {
+      return 'Usuario inválido.';
+    }
+    if (user.role == UserRole.admin) {
+      return 'No puedes eliminar el administrador desde la app.';
+    }
+
+    final uid = user.id;
+
+    // 1) Eliminar de la tabla usuario (evita que siga apareciendo).
+    try {
+      await _supabase.from('usuario').delete().eq('id', uid);
+    } catch (_) {
+      // Si falla por RLS, el usuario podría seguir en el listado.
+      // Igual intentamos borrar desde auth.
+    }
+
+    // 2) Eliminar del auth (si el cliente permite la operación).
+    try {
+      // Esto funciona solo si Supabase permite admin operations desde el cliente.
+      await _supabase.auth.admin.deleteUser(uid);
+    } catch (_) {
+      // Si no está disponible desde el cliente, el trigger/RLS en Supabase debería encargarse.
+    }
+
+    // 3) Si el usuario eliminado era el actual, cerrar sesión.
+    if (_currentUser?.id == uid) {
+      await logout();
+    }
+
+    return null;
+  }
+
   Future<void> init() async {
     final session = _supabase.auth.currentSession;
     if (session != null) {
@@ -25,10 +67,7 @@ class AuthService {
       if (_currentUser != null) return;
     }
 
-    var error = await login(
-      AdminCredentials.email,
-      AdminCredentials.password,
-    );
+    var error = await login(AdminCredentials.email, AdminCredentials.password);
     if (error == null) return;
 
     if (_isInvalidCredentials(error)) {

@@ -239,12 +239,82 @@ class _SettingsPageState extends State<SettingsPage> {
                           u.role == UserRole.admin
                               ? Icons.shield
                               : u.role == UserRole.veterinario
-                                  ? Icons.medical_services
-                                  : Icons.agriculture,
+                              ? Icons.medical_services
+                              : Icons.agriculture,
                           color: AppColors.green,
                         ),
                         title: Text(u.nombre),
                         subtitle: Text('${u.email} · ${u.role.label}'),
+                        trailing: IconButton(
+                          tooltip: 'Eliminar usuario',
+                          icon: const Icon(Icons.delete, color: AppColors.red),
+                          onPressed: () async {
+                            if (u.role == UserRole.admin) return;
+
+                            // ignore: use_build_context_synchronously
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) {
+                                return AlertDialog(
+                                  title: const Text('Eliminar usuario'),
+                                  content: Text(
+                                    '¿Seguro que deseas eliminar a ${u.nombre}?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, false),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, true),
+                                      child: const Text(
+                                        'Eliminar',
+                                        style: TextStyle(color: AppColors.red),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+
+                            // Evita el warning: ya no usaremos `context` después de este await
+                            // (toda notificación usa `messenger`).
+                            if (!mounted) return;
+
+                            if (ok != true) return;
+
+                            final messenger = ScaffoldMessenger.of(context);
+
+                            final err = await _auth.deleteUser(u);
+                            if (!mounted) return;
+                            if (messenger.mounted != true) return;
+
+                            if (err != null) {
+                              // `messenger` captura contexto antes del await, así evitamos usar context en el gap.
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(err),
+                                  backgroundColor: AppColors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            await _loadUsers();
+                            if (!mounted) return;
+
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Usuario eliminado correctamente',
+                                ),
+                                backgroundColor: AppColors.green,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                 ],

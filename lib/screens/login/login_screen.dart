@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/auth/admin_credentials.dart';
 import '../../core/theme/app_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
@@ -22,8 +21,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _usernameController.text = AdminCredentials.email;
-    _passwordController.text = AdminCredentials.password;
+    // Admin por defecto existe en Supabase, pero aquí evitamos autocompletar
+    // para que el usuario lo digite.
   }
 
   @override
