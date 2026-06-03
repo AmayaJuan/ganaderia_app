@@ -32,23 +32,19 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _connectivityDebounce;
 
-  final List<NavItem> _navItems = const [
-    NavItem(icon: Icons.home, label: 'Inicio'),
-    NavItem(icon: Icons.grid_view, label: 'Gestión de Lotes'),
-    NavItem(icon: Icons.pets, label: 'Registro de Animales'),
-    NavItem(icon: Icons.monitor_weight, label: 'Registro de Peso'),
-    NavItem(icon: Icons.bar_chart, label: 'Reportes'),
-    NavItem(icon: Icons.settings, label: 'Configuración'),
-  ];
+  late final List<NavItem> _navItems;
 
   @override
   void initState() {
+    _navItems = _buildNavItems();
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!AuthService.instance.isLoggedIn && mounted) {
         Navigator.pushReplacementNamed(context, AppRoutes.login);
       }
     });
+
     _refreshConnectivity(showFeedback: false);
     _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
       _connectivityDebounce?.cancel();
@@ -72,17 +68,15 @@ class _HomePageState extends State<HomePage> {
       final changed = _isOnline;
       setState(() => _isOnline = false);
       if (showFeedback) {
-        _showSnackBar(
-          'Modo simulacion offline activo.',
-          AppColors.brown,
-        );
+        _showSnackBar('Modo simulacion offline activo.', AppColors.brown);
       }
       if (changed) return;
       return;
     }
 
-    final newOnlineState =
-        await ConnectivityService.isOnline(simulateOffline: false);
+    final newOnlineState = await ConnectivityService.isOnline(
+      simulateOffline: false,
+    );
 
     if (!mounted) return;
 
@@ -94,11 +88,11 @@ class _HomePageState extends State<HomePage> {
     _showSnackBar(
       changed
           ? (newOnlineState
-              ? 'Conexion restablecida. Sincronizando datos locales.'
-              : 'Sin conexion. La app seguira funcionando en modo offline.')
+                ? 'Conexion restablecida. Sincronizando datos locales.'
+                : 'Sin conexion. La app seguira funcionando en modo offline.')
           : (newOnlineState
-              ? 'Ya estas en linea.'
-              : 'Sigues sin conexion. Revisa tu red e intenta de nuevo.'),
+                ? 'Ya estas en linea.'
+                : 'Sigues sin conexion. Revisa tu red e intenta de nuevo.'),
       newOnlineState ? AppColors.green : AppColors.brown,
     );
   }
@@ -231,22 +225,38 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _getBody(int index) {
-    switch (index) {
-      case 0:
-        return DashboardBody(onQuickAction: _onQuickAction);
-      case 1:
-        return const LotesPage();
-      case 2:
-        return const AnimalsPage();
-      case 3:
-        return const WeightPage();
-      case 4:
-        return const ReportsPage();
-      case 5:
-        return const SettingsPage();
-      default:
-        return DashboardBody(onQuickAction: _onQuickAction);
+  List<NavItem> _buildNavItems() {
+    final isAdmin = AuthService.instance.isAdmin;
+
+    final items = <NavItem>[
+      NavItem(icon: Icons.home, label: 'Inicio'),
+      NavItem(icon: Icons.grid_view, label: 'Gestión de Lotes'),
+      NavItem(icon: Icons.pets, label: 'Registro de Animales'),
+      NavItem(icon: Icons.monitor_weight, label: 'Registro de Peso'),
+      NavItem(icon: Icons.bar_chart, label: 'Reportes'),
+    ];
+
+    if (isAdmin) {
+      items.add(NavItem(icon: Icons.settings, label: 'Configuración'));
     }
+
+    return items;
+  }
+
+  Widget _getBody(int index) {
+    // El índice depende de si el admin está habilitado en el sidebar/bottom.
+    // 0..4 siempre existen.
+    if (index == 0) return DashboardBody(onQuickAction: _onQuickAction);
+    if (index == 1) return const LotesPage();
+    if (index == 2) return const AnimalsPage();
+    if (index == 3) return const WeightPage();
+    if (index == 4) return const ReportsPage();
+
+    // Si el usuario es admin, el índice 5 será Configuración.
+    if (index == 5 && AuthService.instance.isAdmin) {
+      return const SettingsPage();
+    }
+
+    return DashboardBody(onQuickAction: _onQuickAction);
   }
 }

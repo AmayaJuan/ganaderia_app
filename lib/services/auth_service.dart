@@ -30,6 +30,15 @@ class AuthService {
     if (user.id.isEmpty) {
       return 'Usuario inválido.';
     }
+
+    // El admin por defecto NO se borra desde la app.
+    // (Aunque alguien tenga rol admin en tabla `usuario`, protegemos la cuenta default.)
+    if (user.email.trim().toLowerCase() ==
+        AdminCredentials.email.trim().toLowerCase()) {
+      return 'No puedes eliminar el administrador por defecto.';
+    }
+
+    // Protección extra: tampoco permitir eliminar administradores manualmente.
     if (user.role == UserRole.admin) {
       return 'No puedes eliminar el administrador desde la app.';
     }
