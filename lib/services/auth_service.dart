@@ -48,18 +48,18 @@ class AuthService {
     // 1) Eliminar de la tabla usuario (evita que siga apareciendo).
     try {
       await _supabase.from('usuario').delete().eq('id', uid);
-    } catch (_) {
-      // Si falla por RLS, el usuario podría seguir en el listado.
-      // Igual intentamos borrar desde auth.
+    } catch (e) {
+      return 'No se pudo borrar de tabla usuario: $e';
     }
 
     // 2) Eliminar del auth (si el cliente permite la operación).
     try {
       // Esto funciona solo si Supabase permite admin operations desde el cliente.
       await _supabase.auth.admin.deleteUser(uid);
-    } catch (_) {
-      // Si no está disponible desde el cliente, el trigger/RLS en Supabase debería encargarse.
+    } catch (e) {
+      return 'Se borró tabla usuario, pero falló admin.deleteUser: $e';
     }
+
 
     // 3) Si el usuario eliminado era el actual, cerrar sesión.
     if (_currentUser?.id == uid) {
