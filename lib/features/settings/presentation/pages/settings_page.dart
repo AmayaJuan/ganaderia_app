@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/auth/app_user.dart';
 import '../../../../core/auth/user_role.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../services/auth_service.dart';
@@ -13,20 +14,46 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _auth = AuthService.instance;
-  final _usernameCtrl = TextEditingController();
+  final _nombreCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  UserRole _newUserRole = UserRole.productor;
+  List<AppUser> _users = [];
+  bool _loadingUsers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
   @override
   void dispose() {
-    _usernameCtrl.dispose();
+    _nombreCtrl.dispose();
+    _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _loadUsers() async {
+    if (!_auth.isAdmin) {
+      setState(() => _loadingUsers = false);
+      return;
+    }
+    final users = await _auth.listUsers();
+    if (!mounted) return;
+    setState(() {
+      _users = users;
+      _loadingUsers = false;
+    });
+  }
+
   Future<void> _createUser() async {
     final error = await _auth.createUser(
-      username: _usernameCtrl.text,
+      nombre: _nombreCtrl.text,
+      email: _emailCtrl.text,
       password: _passwordCtrl.text,
-      role: UserRole.productor,
+      role: _newUserRole,
     );
 
     if (!mounted) return;
@@ -38,9 +65,11 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
-    _usernameCtrl.clear();
+    _nombreCtrl.clear();
+    _emailCtrl.clear();
     _passwordCtrl.clear();
-    setState(() {});
+    await _loadUsers();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Usuario creado correctamente'),
@@ -94,8 +123,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     backgroundColor: AppColors.greenLight,
                     child: Icon(Icons.person, color: AppColors.green),
                   ),
-                  title: Text(user.username),
-                  subtitle: Text(isAdmin ? user.role.label : 'Sesión activa'),
+                  title: Text(user.nombre),
+                  subtitle: Text('${user.email} · ${user.role.label}'),
                 ),
               ],
             ),
@@ -133,11 +162,21 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   TextField(
-                    controller: _usernameCtrl,
+                    controller: _nombreCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Nuevo usuario',
-                      hintText: 'Ej: juan_perez',
+                      labelText: 'Nombre',
+                      hintText: 'Ej: Juan Pérez',
                       prefixIcon: Icon(Icons.person_add_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo electrónico',
+                      hintText: 'usuario@correo.com',
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -152,7 +191,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<UserRole>(
-                    initialValue: UserRole.productor,
+                    initialValue: _newUserRole,
                     decoration: const InputDecoration(
                       labelText: 'Rol del usuario',
                     ),
@@ -161,8 +200,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: UserRole.productor,
                         child: Text('Productor'),
                       ),
+                      DropdownMenuItem(
+                        value: UserRole.veterinario,
+                        child: Text('Veterinario'),
+                      ),
                     ],
-                    onChanged: (_) {},
+                    onChanged: (v) {
+                      if (v != null) setState(() => _newUserRole = v);
+                    },
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -179,19 +224,29 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
-                  ..._auth.listUsers().map(
-                        (u) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            u.role == UserRole.admin
-                                ? Icons.shield
-                                : Icons.agriculture,
-                            color: AppColors.green,
-                          ),
-                          title: Text(u.username),
-                          subtitle: Text(u.role.label),
+                  if (_loadingUsers)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_users.isEmpty)
+                    const Text(
+                      'No hay usuarios en la base de datos.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    )
+                  else
+                    ..._users.map(
+                      (u) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          u.role == UserRole.admin
+                              ? Icons.shield
+                              : u.role == UserRole.veterinario
+                                  ? Icons.medical_services
+                                  : Icons.agriculture,
+                          color: AppColors.green,
                         ),
+                        title: Text(u.nombre),
+                        subtitle: Text('${u.email} · ${u.role.label}'),
                       ),
+                    ),
                 ],
               ),
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/auth/admin_credentials.dart';
 import '../../core/theme/app_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
@@ -17,6 +18,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool obscurePassword = true;
   bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController.text = AdminCredentials.email;
+    _passwordController.text = AdminCredentials.password;
+  }
 
   @override
   void dispose() {
@@ -37,12 +45,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => isLoading = true);
     try {
-      final success = await AuthService.instance.login(username, password);
+      final error = await AuthService.instance.login(username, password);
       if (!mounted) return;
-      if (success) {
+      if (error == null) {
         Navigator.pushReplacementNamed(context, AppRoutes.home);
       } else {
-        showMessage('Usuario o contraseña incorrectos');
+        showMessage(error);
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -103,11 +111,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 32),
                     TextField(
                       controller: _usernameController,
+                      keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Usuario',
-                        hintText: 'Ingresa tu usuario',
-                        prefixIcon: Icon(Icons.person_outline),
+                      decoration: InputDecoration(
+                        labelText: 'Correo electrónico',
+                        hintText: 'Ingrese su correo',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -151,6 +163,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: TextStyle(fontSize: 16),
                               ),
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Los usuarios de la app son dados de alta por el administrador en Configuración.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ],
                 ),

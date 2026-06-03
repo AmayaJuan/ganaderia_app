@@ -1,26 +1,34 @@
 import 'user_role.dart';
 
 class AppUser {
-  final String username;
+  final String id;
+  final String nombre;
+  final String email;
   final String password;
   final UserRole role;
 
   const AppUser({
-    required this.username,
+    this.id = '',
+    required this.nombre,
+    required this.email,
     required this.password,
     required this.role,
   });
 
   Map<String, dynamic> toJson() => {
-        'username': username,
-        'password': password,
-        'role': role.storageValue,
-      };
+    'id':       id,
+    'nombre':   nombre,
+    'email':    email,
+    'password': password,
+    'role': role.storageValue,
+  };
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
-      username: (json['username'] ?? '').toString(),
-      password: (json['password'] ?? '').toString(),
+      id:       (json['id']            ?? '').toString(),
+      nombre:   (json['nombre']        ?? json['username'] ?? '').toString(),
+      email:    (json['email']         ?? '').toString(),
+      password: (json['password']      ?? '').toString(),
       role: UserRole.fromString((json['role'] ?? '').toString()),
     );
   }
