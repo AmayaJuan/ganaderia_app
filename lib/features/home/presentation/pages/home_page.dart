@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
@@ -11,12 +10,12 @@ import '../../../reports/presentation/pages/reports_page.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../../services/auth_service.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
-import '../../../weight/presentation/pages/weight_page.dart';
 import '../models/nav_item.dart';
 import '../widgets/dashboard_body.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/top_bar.dart';
+import '../../../health/presentation/pages/health_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -232,7 +231,7 @@ class _HomePageState extends State<HomePage> {
       NavItem(icon: Icons.home, label: 'Inicio'),
       NavItem(icon: Icons.grid_view, label: 'Gestión de Lotes'),
       NavItem(icon: Icons.pets, label: 'Registro de Animales'),
-      NavItem(icon: Icons.monitor_weight, label: 'Registro de Peso'),
+      NavItem(icon: Icons.health_and_safety, label: 'Control sanitario'),
       NavItem(icon: Icons.bar_chart, label: 'Reportes'),
     ];
 
@@ -249,7 +248,7 @@ class _HomePageState extends State<HomePage> {
     if (index == 0) return DashboardBody(onQuickAction: _onQuickAction);
     if (index == 1) return const LotesPage();
     if (index == 2) return const AnimalsPage();
-    if (index == 3) return const WeightPage();
+    if (index == 3) return const HealthPage();
     if (index == 4) return const ReportsPage();
 
     // Si el usuario es admin, el índice 5 será Configuración.

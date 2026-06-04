@@ -251,7 +251,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () async {
                             if (u.role == UserRole.admin) return;
 
-                            // ignore: use_build_context_synchronously
                             final ok = await showDialog<bool>(
                               context: context,
                               builder: (dialogContext) {
@@ -286,10 +285,12 @@ class _SettingsPageState extends State<SettingsPage> {
                             if (ok != true) return;
 
                             final messenger = ScaffoldMessenger.of(context);
+                            // ignore: use_build_context_synchronously
 
                             final err = await _auth.deleteUser(u);
                             if (!mounted) return;
-                            if (messenger.mounted != true) return;
+                            // `messenger` no depende de setState y permite evitar usar `context` nuevamente.
+                            if (!messenger.mounted) return;
 
                             if (err != null) {
                               // `messenger` captura contexto antes del await, así evitamos usar context en el gap.
