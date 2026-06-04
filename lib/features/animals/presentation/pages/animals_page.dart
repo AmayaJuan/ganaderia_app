@@ -12,21 +12,25 @@ class AnimalsPage extends StatefulWidget {
 // ── Modelo local ─────────────────────────────────────
 class _Animal {
   final String id;
+  final String? idAnimal;
   final String raza;
   final String sexo;
   final String? fechaNacimiento;
   final String? idLote;
   final String? nombreLote;
   final double? ultimoPeso;
+  final String? ultimaFechaPeso;
 
   _Animal({
     required this.id,
+    this.idAnimal,
     required this.raza,
     required this.sexo,
     this.fechaNacimiento,
     this.idLote,
     this.nombreLote,
     this.ultimoPeso,
+    this.ultimaFechaPeso,
   });
 
   String get edad {
@@ -69,7 +73,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
       final data = await _db
           .from('animales')
           .select('''
-            id, raza, sexo, fecha_nacimiento, id_lote,
+            id, id_animal, raza, sexo, fecha_nacimiento, id_lote,
             lotes(nombre),
             registro_peso(peso, fecha)
           ''')
@@ -78,12 +82,14 @@ class _AnimalsPageState extends State<AnimalsPage> {
       _animales = (data as List).map((item) {
         // Obtener último peso
         double? ultimoPeso;
+        String? ultimaFechaPeso;
         final pesos = item['registro_peso'] as List?;
         if (pesos != null && pesos.isNotEmpty) {
           pesos.sort(
             (a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String),
           );
           ultimoPeso = (pesos.first['peso'] as num).toDouble();
+          ultimaFechaPeso = pesos.first['fecha'] as String?;
         }
 
         return _Animal(
@@ -91,9 +97,11 @@ class _AnimalsPageState extends State<AnimalsPage> {
           raza: item['raza'] ?? '—',
           sexo: item['sexo'] ?? '—',
           fechaNacimiento: item['fecha_nacimiento'],
+          idAnimal: item['id_animal'] as String?,
           idLote: item['id_lote'],
           nombreLote: item['lotes']?['nombre'],
           ultimoPeso: ultimoPeso,
+          ultimaFechaPeso: ultimaFechaPeso,
         );
       }).toList();
 
@@ -235,6 +243,14 @@ class _AnimalsPageState extends State<AnimalsPage> {
                               columns: const [
                                 DataColumn(
                                   label: Text(
+                                    'ID',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: Text(
                                     'Raza',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
@@ -285,24 +301,61 @@ class _AnimalsPageState extends State<AnimalsPage> {
                               rows: _filtrados.map((a) {
                                 return DataRow(
                                   cells: [
+                                    DataCell(
+                                      Text(
+                                        a.idAnimal ?? '—',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.green,
+                                        ),
+                                      ),
+                                    ),
                                     DataCell(Text(a.raza)),
                                     DataCell(_sexoBadge(a.sexo)),
                                     DataCell(Text(a.edad)),
                                     DataCell(Text(a.nombreLote ?? '—')),
                                     DataCell(
-                                      Text(
-                                        a.ultimoPeso != null
-                                            ? '${a.ultimoPeso!.toStringAsFixed(1)} kg'
-                                            : '—',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.green,
-                                        ),
-                                      ),
+                                      a.ultimoPeso != null
+                                          ? Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${a.ultimoPeso!.toStringAsFixed(1)} kg',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.green,
+                                                  ),
+                                                ),
+                                                if (a.ultimaFechaPeso != null)
+                                                  Text(
+                                                    _fmtFecha(
+                                                      a.ultimaFechaPeso!,
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                              ],
+                                            )
+                                          : const Text('—'),
                                     ),
                                     DataCell(
                                       Row(
                                         children: [
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.show_chart,
+                                              size: 16,
+                                              color: Colors.orange,
+                                            ),
+                                            tooltip: 'Historial de pesos',
+                                            onPressed: () =>
+                                                _mostrarHistorialPesos(a),
+                                          ),
                                           IconButton(
                                             icon: const Icon(
                                               Icons.edit,
@@ -336,6 +389,25 @@ class _AnimalsPageState extends State<AnimalsPage> {
                 ),
         ),
       ],
+    );
+  }
+
+  // ── Utilidad: formatea 'yyyy-MM-dd' → 'dd/MM/yyyy' ─────────────────────────
+  static String _fmtFecha(String iso) {
+    final parts = iso.split('-');
+    if (parts.length != 3) return iso;
+    return '${parts[2]}/${parts[1]}/${parts[0]}';
+  }
+
+  // ── Historial de pesos ────────────────────────────────────────────────────
+  void _mostrarHistorialPesos(_Animal animal) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _HistorialPesosDialog(
+        db: _db,
+        animal: animal,
+        onPesoEliminado: _cargarDatos,
+      ),
     );
   }
 
@@ -406,13 +478,22 @@ class _AnimalsPageState extends State<AnimalsPage> {
   }
 
   // ── Formulario ───────────────────────────────────
+  // Sentinel para "Sin lote" — evita el bug de Flutter con value: null en DropdownButtonFormField
+  static const _kSinLote = '__none__';
+
   void _mostrarFormulario({_Animal? animal}) {
+    final idAnimalCtrl = TextEditingController(text: animal?.idAnimal ?? '');
     final razaCtrl = TextEditingController(text: animal?.raza ?? '');
+    // En edición, el campo peso siempre empieza vacío:
+    // solo se inserta en registro_peso si el usuario escribe un valor nuevo.
+    final pesoCtrl = TextEditingController();
     String sexo = animal?.sexo ?? 'Macho';
-    String? idLote = animal?.idLote;
+    // Usamos sentinel para evitar bug de Flutter con null en DropdownButtonFormField
+    String loteVal = animal?.idLote ?? _kSinLote;
     DateTime? fechaNac = animal?.fechaNacimiento != null
         ? DateTime.tryParse(animal!.fechaNacimiento!)
         : null;
+    DateTime fechaPeso = DateTime.now();
     final formKey = GlobalKey<FormState>();
     final esEdicion = animal != null;
 
@@ -435,114 +516,217 @@ class _AnimalsPageState extends State<AnimalsPage> {
           ),
           content: SizedBox(
             width: 400,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Raza
-                  TextFormField(
-                    controller: razaCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Raza *',
-                      hintText: 'Ej: Brahman, Cebu, Angus',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    validator: (v) =>
-                        v!.trim().isEmpty ? 'La raza es obligatoria' : null,
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Sexo
-                  DropdownButtonFormField<String>(
-                    value: sexo,
-                    decoration: InputDecoration(
-                      labelText: 'Sexo *',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'Macho', child: Text('Macho')),
-                      DropdownMenuItem(value: 'Hembra', child: Text('Hembra')),
-                    ],
-                    onChanged: (v) => setModalState(() => sexo = v!),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Lote
-                  DropdownButtonFormField<String>(
-                    value: idLote,
-                    decoration: InputDecoration(
-                      labelText: 'Lote',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Sin lote'),
-                      ),
-                      ..._lotes.map(
-                        (l) => DropdownMenuItem(
-                          value: l['id'] as String,
-                          child: Text(l['nombre'] as String),
+            child: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── ID Animal ──────────────────────────────
+                    TextFormField(
+                      controller: idAnimalCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'ID Animal (arete / chip)',
+                        hintText: 'Ej: 00123, CH-456',
+                        prefixIcon: const Icon(Icons.tag),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                    ],
-                    onChanged: (v) => setModalState(() => idLote = v),
-                  ),
-                  const SizedBox(height: 14),
+                    ),
+                    const SizedBox(height: 14),
 
-                  // Fecha nacimiento
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: fechaNac ?? DateTime.now(),
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        setModalState(() => fechaNac = picked);
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 14,
+                    // ── Raza ───────────────────────────────────
+                    TextFormField(
+                      controller: razaCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Raza *',
+                        hintText: 'Ej: Brahman, Cebu, Angus',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(10),
+                      validator: (v) =>
+                          v!.trim().isEmpty ? 'La raza es obligatoria' : null,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Sexo ───────────────────────────────────
+                    DropdownButtonFormField<String>(
+                      value: sexo,
+                      decoration: InputDecoration(
+                        labelText: 'Sexo *',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today,
-                            size: 16,
-                            color: Colors.grey,
+                      items: const [
+                        DropdownMenuItem(value: 'Macho', child: Text('Macho')),
+                        DropdownMenuItem(
+                          value: 'Hembra',
+                          child: Text('Hembra'),
+                        ),
+                      ],
+                      onChanged: (v) => setModalState(() => sexo = v!),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Lote (sentinel fix) ────────────────────
+                    DropdownButtonFormField<String>(
+                      value: loteVal,
+                      decoration: InputDecoration(
+                        labelText: 'Lote',
+                        prefixIcon: const Icon(Icons.folder_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: _kSinLote,
+                          child: Text('Sin lote'),
+                        ),
+                        ..._lotes.map(
+                          (l) => DropdownMenuItem(
+                            value: l['id'] as String,
+                            child: Text(l['nombre'] as String),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            fechaNac != null
-                                ? '${fechaNac!.day}/${fechaNac!.month}/${fechaNac!.year}'
-                                : 'Fecha de nacimiento',
-                            style: TextStyle(
-                              color: fechaNac != null
-                                  ? Colors.black87
-                                  : Colors.grey,
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setModalState(() => loteVal = v ?? _kSinLote),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Fecha nacimiento ───────────────────────
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: fechaNac ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setModalState(() => fechaNac = picked);
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.cake_outlined,
+                              size: 16,
+                              color: Colors.grey,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Text(
+                              fechaNac != null
+                                  ? '${fechaNac!.day.toString().padLeft(2, '0')}/${fechaNac!.month.toString().padLeft(2, '0')}/${fechaNac!.year}'
+                                  : 'Fecha de nacimiento (opcional)',
+                              style: TextStyle(
+                                color: fechaNac != null
+                                    ? Colors.black87
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+
+                    // ── Peso ───────────────────────────────────
+                    TextFormField(
+                      controller: pesoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: esEdicion
+                            ? 'Registrar nuevo peso (opcional)'
+                            : 'Peso inicial (kg)',
+                        hintText: esEdicion
+                            ? 'Dejar vacío para no registrar'
+                            : 'Ej: 250.5',
+                        prefixIcon: const Icon(Icons.monitor_weight_outlined),
+                        suffixText: 'kg',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v != null && v.trim().isNotEmpty) {
+                          final p = double.tryParse(
+                            v.trim().replaceAll(',', '.'),
+                          );
+                          if (p == null || p <= 0) {
+                            return 'Ingresa un peso válido mayor a 0';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Fecha del peso ─────────────────────────
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: fechaPeso,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setModalState(() => fechaPeso = picked);
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.event_note_outlined,
+                              size: 16,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${fechaPeso.day.toString().padLeft(2, '0')}/${fechaPeso.month.toString().padLeft(2, '0')}/${fechaPeso.year}',
+                              style: const TextStyle(color: Colors.black87),
+                            ),
+                            const Spacer(),
+                            const Text(
+                              'Fecha del peso',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -567,10 +751,19 @@ class _AnimalsPageState extends State<AnimalsPage> {
                 Navigator.pop(ctx);
                 await _guardarAnimal(
                   id: animal?.id,
+                  idAnimal: idAnimalCtrl.text.trim().isEmpty
+                      ? null
+                      : idAnimalCtrl.text.trim(),
                   raza: razaCtrl.text.trim(),
                   sexo: sexo,
-                  idLote: idLote,
+                  idLote: loteVal == _kSinLote ? null : loteVal,
                   fechaNac: fechaNac,
+                  pesoKg: pesoCtrl.text.trim().isEmpty
+                      ? null
+                      : double.tryParse(
+                          pesoCtrl.text.trim().replaceAll(',', '.'),
+                        ),
+                  fechaPeso: fechaPeso,
                   esEdicion: esEdicion,
                 );
               },
@@ -584,26 +777,48 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
   Future<void> _guardarAnimal({
     String? id,
+    String? idAnimal,
     required String raza,
     required String sexo,
     String? idLote,
     DateTime? fechaNac,
+    double? pesoKg,
+    required DateTime fechaPeso,
     required bool esEdicion,
   }) async {
     try {
-      final data = {
+      final data = <String, dynamic>{
+        if (idAnimal != null && idAnimal.isNotEmpty) 'id_animal': idAnimal,
         'raza': raza,
         'sexo': sexo,
-        if (idLote != null) 'id_lote': idLote,
+        'id_lote': idLote, // null limpia el lote correctamente
         if (fechaNac != null)
           'fecha_nacimiento':
               '${fechaNac.year}-${fechaNac.month.toString().padLeft(2, '0')}-${fechaNac.day.toString().padLeft(2, '0')}',
       };
 
+      String animalId;
       if (esEdicion && id != null) {
         await _db.from('animales').update(data).eq('id', id);
+        animalId = id;
       } else {
-        await _db.from('animales').insert(data);
+        final inserted = await _db
+            .from('animales')
+            .insert(data)
+            .select('id')
+            .single();
+        animalId = inserted['id'] as String;
+      }
+
+      // Registrar peso en registro_peso con la fecha elegida
+      if (pesoKg != null) {
+        final fechaStr =
+            '${fechaPeso.year}-${fechaPeso.month.toString().padLeft(2, '0')}-${fechaPeso.day.toString().padLeft(2, '0')}';
+        await _db.from('registro_peso').insert({
+          'id_animal': animalId,
+          'peso': pesoKg,
+          'fecha': fechaStr,
+        });
       }
 
       await _cargarDatos();
@@ -691,6 +906,332 @@ class _AnimalsPageState extends State<AnimalsPage> {
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diálogo: Historial de pesos por animal
+// ─────────────────────────────────────────────────────────────────────────────
+class _HistorialPesosDialog extends StatefulWidget {
+  final dynamic db;
+  final _Animal animal;
+  final VoidCallback onPesoEliminado;
+
+  const _HistorialPesosDialog({
+    required this.db,
+    required this.animal,
+    required this.onPesoEliminado,
+  });
+
+  @override
+  State<_HistorialPesosDialog> createState() => _HistorialPesosDialogState();
+}
+
+class _HistorialPesosDialogState extends State<_HistorialPesosDialog> {
+  List<Map<String, dynamic>> _registros = [];
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() => _cargando = true);
+    try {
+      final data = await widget.db
+          .from('registro_peso')
+          .select('id, peso, fecha')
+          .eq('id_animal', widget.animal.id)
+          .order('fecha', ascending: false);
+      setState(() {
+        _registros = List<Map<String, dynamic>>.from(data);
+        _cargando = false;
+      });
+    } catch (e) {
+      setState(() => _cargando = false);
+    }
+  }
+
+  String _fmt(String iso) {
+    final p = iso.split('-');
+    return p.length == 3 ? '${p[2]}/${p[1]}/${p[0]}' : iso;
+  }
+
+  Future<void> _eliminarRegistro(String registroId) async {
+    try {
+      await widget.db.from('registro_peso').delete().eq('id', registroId);
+      widget.onPesoEliminado();
+      await _cargar();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al eliminar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Calcular ganancia entre pesajes (orden descendente → diff con siguiente)
+    final List<double?> ganancias = List.filled(_registros.length, null);
+    for (int i = 0; i < _registros.length - 1; i++) {
+      final actual = (_registros[i]['peso'] as num).toDouble();
+      final anterior = (_registros[i + 1]['peso'] as num).toDouble();
+      ganancias[i] = actual - anterior;
+    }
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      title: Row(
+        children: [
+          const Icon(Icons.show_chart, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Historial de pesos',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${widget.animal.raza} · ID: ${widget.animal.idAnimal ?? widget.animal.id.substring(0, 8)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 480,
+        height: 380,
+        child: _cargando
+            ? const Center(child: CircularProgressIndicator())
+            : _registros.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.monitor_weight_outlined,
+                      size: 48,
+                      color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Sin registros de peso',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  // ── Resumen ──────────────────────────────────────
+                  if (_registros.length >= 2)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.greenLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _statChip(
+                            'Primer peso',
+                            '${(_registros.last['peso'] as num).toStringAsFixed(1)} kg',
+                            Icons.start,
+                            Colors.grey,
+                          ),
+                          _statChip(
+                            'Último peso',
+                            '${(_registros.first['peso'] as num).toStringAsFixed(1)} kg',
+                            Icons.flag_outlined,
+                            AppColors.green,
+                          ),
+                          _statChip(
+                            'Ganancia total',
+                            () {
+                              final g =
+                                  (_registros.first['peso'] as num) -
+                                  (_registros.last['peso'] as num);
+                              return '${g >= 0 ? '+' : ''}${g.toStringAsFixed(1)} kg';
+                            }(),
+                            Icons.trending_up,
+                            Colors.orange,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // ── Lista de registros ───────────────────────────
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: _registros.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final r = _registros[i];
+                        final peso = (r['peso'] as num).toDouble();
+                        final fecha = r['fecha'] as String;
+                        final ganancia = ganancias[i];
+                        final esMasReciente = i == 0;
+
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: esMasReciente
+                                ? AppColors.green
+                                : Colors.grey.shade200,
+                            child: Text(
+                              '${_registros.length - i}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: esMasReciente
+                                    ? Colors.white
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                '${peso.toStringAsFixed(1)} kg',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: esMasReciente
+                                      ? AppColors.green
+                                      : Colors.black87,
+                                ),
+                              ),
+                              if (ganancia != null) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: ganancia >= 0
+                                        ? Colors.green.shade50
+                                        : Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${ganancia >= 0 ? '+' : ''}${ganancia.toStringAsFixed(1)} kg',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: ganancia >= 0
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          subtitle: Text(
+                            _fmt(fecha),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 16,
+                              color: Colors.red,
+                            ),
+                            tooltip: 'Eliminar registro',
+                            onPressed: () async {
+                              final confirmar = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  title: const Text('Eliminar registro'),
+                                  content: Text(
+                                    '¿Eliminar el peso del ${_fmt(fecha)}?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(c, false),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () => Navigator.pop(c, true),
+                                      child: const Text('Eliminar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmar == true) {
+                                await _eliminarRegistro(r['id'] as String);
+                              }
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _statChip(String label, String value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: color,
+            fontSize: 13,
+          ),
+        ),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
     );
   }
 }
