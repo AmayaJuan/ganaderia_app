@@ -166,14 +166,14 @@ class _ReportsPageState extends State<ReportsPage> {
       // ── Controles sanitarios en el período ───────────────────────────────
       final sanitData = await _db
           .from('registro_sanitario')
-          .select('tipo_control')
+          .select('tipo, fecha, id_animal')
           .gte('fecha', desde);
 
       _totalControles = (sanitData as List).length;
 
       final Map<String, int> sanitCount = {};
       for (final s in sanitData) {
-        final tipo = (s['tipo_control'] as String?)?.trim() ?? 'Otro';
+        final tipo = (s['tipo'] as String?)?.trim() ?? 'Otro';
         sanitCount[tipo] = (sanitCount[tipo] ?? 0) + 1;
       }
       _sanitStats =

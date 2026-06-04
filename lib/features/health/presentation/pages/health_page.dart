@@ -52,7 +52,9 @@ class _HealthPageState extends State<HealthPage> {
       // Cargar registro_sanitario con datos del animal
       final data = await _db
           .from('registro_sanitario')
-          .select('id, tipo, fecha, observaciones, proximo_control, id_animal, animales(raza, id_animal)')
+          .select(
+            'id, tipo, fecha, observaciones, proximo_control, id_animal, animales(raza, id_animal)',
+          )
           .order('created_at', ascending: false);
 
       _registros = List<Map<String, dynamic>>.from(data);
@@ -308,98 +310,107 @@ class _HealthPageState extends State<HealthPage> {
                                 ],
                                 rows: _registros.map((r) {
                                   final pc = r['proximo_control'];
-                                  final vencido = pc != null &&
-                                      DateTime.tryParse(pc)
-                                              ?.isBefore(DateTime.now()) ==
+                                  final vencido =
+                                      pc != null &&
+                                      DateTime.tryParse(
+                                            pc,
+                                          )?.isBefore(DateTime.now()) ==
                                           true;
 
-                                  return DataRow(cells: [
-                                    // Tipo
-                                    DataCell(
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: r['tipo'] == 'Vacunación'
-                                              ? AppColors.green
-                                                  .withValues(alpha: 0.1)
-                                              : Colors.blue
-                                                  .withValues(alpha: 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          r['tipo'] ?? '—',
-                                          style: TextStyle(
+                                  return DataRow(
+                                    cells: [
+                                      // Tipo
+                                      DataCell(
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
                                             color: r['tipo'] == 'Vacunación'
-                                                ? AppColors.green
-                                                : Colors.blue,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
+                                                ? AppColors.green.withValues(
+                                                    alpha: 0.1,
+                                                  )
+                                                : Colors.blue.withValues(
+                                                    alpha: 0.1,
+                                                  ),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            r['tipo'] ?? '—',
+                                            style: TextStyle(
+                                              color: r['tipo'] == 'Vacunación'
+                                                  ? AppColors.green
+                                                  : Colors.blue,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    // Animal
-                                    DataCell(Text(_nombreAnimal(r))),
-                                    // Observaciones
-                                    DataCell(
-                                      SizedBox(
-                                        width: 160,
-                                        child: Text(
-                                          r['observaciones'] ?? '—',
-                                          overflow: TextOverflow.ellipsis,
+                                      // Animal
+                                      DataCell(Text(_nombreAnimal(r))),
+                                      // Observaciones
+                                      DataCell(
+                                        SizedBox(
+                                          width: 160,
+                                          child: Text(
+                                            r['observaciones'] ?? '—',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    // Fecha
-                                    DataCell(
-                                      Text(_fmtFecha(r['fecha'] ?? '')),
-                                    ),
-                                    // Próximo control
-                                    DataCell(
-                                      pc != null
-                                          ? Text(
-                                              _fmtFecha(pc),
-                                              style: TextStyle(
-                                                color: vencido
-                                                    ? Colors.red
-                                                    : Colors.orange.shade700,
-                                                fontWeight: FontWeight.w600,
+                                      // Fecha
+                                      DataCell(
+                                        Text(_fmtFecha(r['fecha'] ?? '')),
+                                      ),
+                                      // Próximo control
+                                      DataCell(
+                                        pc != null
+                                            ? Text(
+                                                _fmtFecha(pc),
+                                                style: TextStyle(
+                                                  color: vencido
+                                                      ? Colors.red
+                                                      : Colors.orange.shade700,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              )
+                                            : const Text('—'),
+                                      ),
+                                      // Acciones
+                                      DataCell(
+                                        Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                size: 16,
+                                                color: AppColors.blue,
                                               ),
-                                            )
-                                          : const Text('—'),
-                                    ),
-                                    // Acciones
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              size: 16,
-                                              color: AppColors.blue,
+                                              tooltip: 'Editar',
+                                              onPressed: () =>
+                                                  _mostrarFormulario(
+                                                    registro: r,
+                                                  ),
                                             ),
-                                            tooltip: 'Editar',
-                                            onPressed: () =>
-                                                _mostrarFormulario(registro: r),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.delete,
-                                              size: 16,
-                                              color: Colors.red,
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                size: 16,
+                                                color: Colors.red,
+                                              ),
+                                              tooltip: 'Eliminar',
+                                              onPressed: () =>
+                                                  _confirmarEliminar(r),
                                             ),
-                                            tooltip: 'Eliminar',
-                                            onPressed: () =>
-                                                _confirmarEliminar(r),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ]);
+                                    ],
+                                  );
                                 }).toList(),
                               ),
                             ),
@@ -499,7 +510,7 @@ class _HealthPageState extends State<HealthPage> {
                     initialValue: idAnimalVal,
                     decoration: InputDecoration(
                       labelText: 'Animal *',
-                      prefixIcon: const Icon(Icons.pets),
+                      prefixIcon: const Icon(Icons.agriculture),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -555,7 +566,10 @@ class _HealthPageState extends State<HealthPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -620,10 +634,14 @@ class _HealthPageState extends State<HealthPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(esEdicion ? 'Registro actualizado' : 'Registro guardado'),
+            content: Text(
+              esEdicion ? 'Registro actualizado' : 'Registro guardado',
+            ),
             backgroundColor: AppColors.green,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -663,10 +681,7 @@ class _HealthPageState extends State<HealthPage> {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await _db
-                    .from('registro_sanitario')
-                    .delete()
-                    .eq('id', r['id']);
+                await _db.from('registro_sanitario').delete().eq('id', r['id']);
                 await _cargarDatos();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
