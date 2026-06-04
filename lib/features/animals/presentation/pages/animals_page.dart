@@ -553,7 +553,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Sexo ───────────────────────────────────
                     DropdownButtonFormField<String>(
-                      value: sexo,
+                      initialValue: sexo,
                       decoration: InputDecoration(
                         labelText: 'Sexo *',
                         border: OutlineInputBorder(
@@ -573,7 +573,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Lote (sentinel fix) ────────────────────
                     DropdownButtonFormField<String>(
-                      value: loteVal,
+                      initialValue: loteVal,
                       decoration: InputDecoration(
                         labelText: 'Lote',
                         prefixIcon: const Icon(Icons.folder_outlined),
@@ -1087,7 +1087,7 @@ class _HistorialPesosDialogState extends State<_HistorialPesosDialog> {
                   Expanded(
                     child: ListView.separated(
                       itemCount: _registros.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final r = _registros[i];
                         final peso = (r['peso'] as num).toDouble();
