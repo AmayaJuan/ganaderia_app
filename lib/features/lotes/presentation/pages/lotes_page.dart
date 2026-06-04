@@ -1,13 +1,9 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../domain/models/lote_model.dart';
 
-/// Vista de gestión de lotes (cuerpo dentro del home).
+/// Vista de gestión de lotes — persistencia en Supabase.
 class LotesPage extends StatefulWidget {
   const LotesPage({super.key});
 
@@ -15,52 +11,128 @@ class LotesPage extends StatefulWidget {
   State<LotesPage> createState() => _LotesPageState();
 }
 
+class _LoteModel {
+  final String id;
+  String nombre;
+  String descripcion;
+  int animales;
+
+  _LoteModel({
+    required this.id,
+    required this.nombre,
+    required this.descripcion,
+    this.animales = 0,
+  });
+}
+
 class _LotesPageState extends State<LotesPage> {
-  static const _storageKey = 'home_lotes_v1';
-  final List<LoteModel> _lotes = [];
+  final _db = Supabase.instance.client;
+  List<_LoteModel> _lotes = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadLotes();
+    _cargarLotes();
   }
 
-  Future<void> _loadLotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
-    if (!mounted) return;
-
-    if (raw == null || raw.isEmpty) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
+  Future<void> _cargarLotes() async {
+    setState(() => _isLoading = true);
     try {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        final parsed = decoded
-            .whereType<Map>()
-            .map((item) => LoteModel.fromJson(Map<String, dynamic>.from(item)))
-            .toList();
-        setState(() {
-          _lotes
-            ..clear()
-            ..addAll(parsed);
-          _isLoading = false;
-        });
-      } else {
+      // Traer lotes con conteo de animales asociados
+      final data = await _db
+          .from('lotes')
+          .select('id, nombre, descripcion, animales(count)')
+          .order('nombre');
+
+      setState(() {
+        _lotes = (data as List).map((item) {
+          final countList = item['animales'] as List?;
+          final count = countList != null && countList.isNotEmpty
+              ? (countList.first['count'] as int? ?? 0)
+              : 0;
+          return _LoteModel(
+            id: item['id'] as String,
+            nombre: item['nombre'] as String? ?? '',
+            descripcion: item['descripcion'] as String? ?? '',
+            animales: count,
+          );
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
         setState(() => _isLoading = false);
+        _mostrarError('Error al cargar lotes: $e');
       }
-    } catch (_) {
-      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _saveLotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = jsonEncode(_lotes.map((l) => l.toJson()).toList());
-    await prefs.setString(_storageKey, raw);
+  Future<void> _guardarLote({
+    String? id,
+    required String nombre,
+    required String descripcion,
+  }) async {
+    try {
+      if (id != null) {
+        await _db
+            .from('lotes')
+            .update({'nombre': nombre, 'descripcion': descripcion})
+            .eq('id', id);
+      } else {
+        await _db.from('lotes').insert({
+          'nombre': nombre,
+          'descripcion': descripcion,
+        });
+      }
+      await _cargarLotes();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(id != null ? 'Lote actualizado' : 'Lote creado'),
+            backgroundColor: AppColors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      _mostrarError('Error al guardar lote: $e');
+    }
+  }
+
+  Future<void> _eliminarLote(String id, String nombre) async {
+    try {
+      await _db.from('lotes').delete().eq('id', id);
+      await _cargarLotes();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Lote eliminado'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      _mostrarError('Error al eliminar lote: $e');
+    }
+  }
+
+  void _mostrarError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -94,21 +166,31 @@ class _LotesPageState extends State<LotesPage> {
                   ),
                 ],
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: AppColors.green),
+                    tooltip: 'Actualizar',
+                    onPressed: _cargarLotes,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nuevo Lote'),
+                    onPressed: () => _mostrarFormulario(),
                   ),
-                ),
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo Lote'),
-                onPressed: () => _mostrarFormulario(),
+                ],
               ),
             ],
           ),
@@ -166,11 +248,11 @@ class _LotesPageState extends State<LotesPage> {
                   child: GridView.builder(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.2,
-                    ),
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.2,
+                        ),
                     itemCount: _lotes.length,
                     itemBuilder: (ctx, i) {
                       final lote = _lotes[i];
@@ -292,7 +374,7 @@ class _LotesPageState extends State<LotesPage> {
     );
   }
 
-  void _mostrarFormulario({LoteModel? lote}) {
+  void _mostrarFormulario({_LoteModel? lote}) {
     final nombreCtrl = TextEditingController(text: lote?.nombre ?? '');
     final descCtrl = TextEditingController(text: lote?.descripcion ?? '');
     final formKey = GlobalKey<FormState>();
@@ -360,36 +442,13 @@ class _LotesPageState extends State<LotesPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               if (!formKey.currentState!.validate()) return;
-              final loteActual = lote;
-              setState(() {
-                if (esEdicion && loteActual != null) {
-                  loteActual.nombre = nombreCtrl.text.trim();
-                  loteActual.descripcion = descCtrl.text.trim();
-                } else {
-                  _lotes.add(
-                    LoteModel(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      nombre: nombreCtrl.text.trim(),
-                      descripcion: descCtrl.text.trim(),
-                    ),
-                  );
-                }
-              });
-              unawaited(_saveLotes());
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    esEdicion ? 'Lote actualizado' : 'Lote creado',
-                  ),
-                  backgroundColor: AppColors.green,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
+              await _guardarLote(
+                id: lote?.id,
+                nombre: nombreCtrl.text.trim(),
+                descripcion: descCtrl.text.trim(),
               );
             },
             child: Text(esEdicion ? 'Guardar cambios' : 'Crear lote'),
@@ -399,7 +458,7 @@ class _LotesPageState extends State<LotesPage> {
     );
   }
 
-  void _confirmarEliminar(LoteModel lote) {
+  void _confirmarEliminar(_LoteModel lote) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -428,20 +487,9 @@ class _LotesPageState extends State<LotesPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {
-              setState(() => _lotes.remove(lote));
-              unawaited(_saveLotes());
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Lote eliminado'),
-                  backgroundColor: Colors.red,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              );
+              await _eliminarLote(lote.id, lote.nombre);
             },
             child: const Text('Eliminar'),
           ),
