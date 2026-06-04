@@ -441,7 +441,11 @@ class _AnimalsPageState extends State<AnimalsPage> {
               color: AppColors.greenLight,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.pets, size: 48, color: AppColors.green),
+            child: const Icon(
+              Icons.agriculture,
+              size: 48,
+              color: AppColors.green,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -483,7 +487,24 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
   void _mostrarFormulario({_Animal? animal}) {
     final idAnimalCtrl = TextEditingController(text: animal?.idAnimal ?? '');
-    final razaCtrl = TextEditingController(text: animal?.raza ?? '');
+    final _kRazas = const [
+      'Brahman',
+      'Cebú',
+      'Angus',
+      'Hereford',
+      'Simmental',
+      'Charolais',
+      'Limousin',
+      'Brangus',
+      'Gyr',
+      'Romosinuano',
+      'Blanco Orejinegro',
+      'Normando',
+      'Holstein',
+      'Pardo Suizo',
+      'Otro',
+    ];
+    String razaVal = _kRazas.contains(animal?.raza) ? animal!.raza : 'Otro';
     // En edición, el campo peso siempre empieza vacío:
     // solo se inserta en registro_peso si el usuario escribe un valor nuevo.
     final pesoCtrl = TextEditingController();
@@ -537,23 +558,31 @@ class _AnimalsPageState extends State<AnimalsPage> {
                     const SizedBox(height: 14),
 
                     // ── Raza ───────────────────────────────────
-                    TextFormField(
-                      controller: razaCtrl,
+                    DropdownButtonFormField<String>(
+                      value: razaVal,
                       decoration: InputDecoration(
                         labelText: 'Raza *',
-                        hintText: 'Ej: Brahman, Cebu, Angus',
+                        prefixIcon: const Icon(Icons.agriculture),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      validator: (v) =>
-                          v!.trim().isEmpty ? 'La raza es obligatoria' : null,
+                      items: _kRazas
+                          .map(
+                            (r) => DropdownMenuItem(value: r, child: Text(r)),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setModalState(() => razaVal = v ?? 'Otro'),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'La raza es obligatoria'
+                          : null,
                     ),
                     const SizedBox(height: 14),
 
                     // ── Sexo ───────────────────────────────────
                     DropdownButtonFormField<String>(
-                      initialValue: sexo,
+                      value: sexo,
                       decoration: InputDecoration(
                         labelText: 'Sexo *',
                         border: OutlineInputBorder(
@@ -573,7 +602,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Lote (sentinel fix) ────────────────────
                     DropdownButtonFormField<String>(
-                      initialValue: loteVal,
+                      value: loteVal,
                       decoration: InputDecoration(
                         labelText: 'Lote',
                         prefixIcon: const Icon(Icons.folder_outlined),
@@ -754,7 +783,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
                   idAnimal: idAnimalCtrl.text.trim().isEmpty
                       ? null
                       : idAnimalCtrl.text.trim(),
-                  raza: razaCtrl.text.trim(),
+                  raza: razaVal,
                   sexo: sexo,
                   idLote: loteVal == _kSinLote ? null : loteVal,
                   fechaNac: fechaNac,
@@ -1087,7 +1116,7 @@ class _HistorialPesosDialogState extends State<_HistorialPesosDialog> {
                   Expanded(
                     child: ListView.separated(
                       itemCount: _registros.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final r = _registros[i];
                         final peso = (r['peso'] as num).toDouble();

@@ -230,7 +230,7 @@ class _HomePageState extends State<HomePage> {
     final items = <NavItem>[
       NavItem(icon: Icons.home, label: 'Inicio'),
       NavItem(icon: Icons.grid_view, label: 'Gestión de Lotes'),
-      NavItem(icon: Icons.pets, label: 'Registro de Animales'),
+      NavItem(icon: Icons.agriculture, label: 'Registro de Animales'),
       NavItem(icon: Icons.health_and_safety, label: 'Control sanitario'),
       NavItem(icon: Icons.bar_chart, label: 'Reportes'),
     ];

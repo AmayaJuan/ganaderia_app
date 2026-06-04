@@ -1,9 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
-/// Reportes con gráfico y resumen (como en el prototipo).
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
 
@@ -11,235 +11,568 @@ class ReportsPage extends StatefulWidget {
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
+// ── Modelos internos ──────────────────────────────────────────────────────────
+class _LoteStat {
+  final String nombre;
+  final double pesoPromedio;
+  final int animales;
+  _LoteStat({
+    required this.nombre,
+    required this.pesoPromedio,
+    required this.animales,
+  });
+}
+
+class _RazaStat {
+  final String raza;
+  final int cantidad;
+  _RazaStat({required this.raza, required this.cantidad});
+}
+
+class _SanitarioStat {
+  final String tipo;
+  final int cantidad;
+  _SanitarioStat({required this.tipo, required this.cantidad});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class _ReportsPageState extends State<ReportsPage> {
-  int _selectedReport = 0;
-  int _selectedPeriod = 1; // Mes
+  final _db = Supabase.instance.client;
+
+  int _selectedReport = 0; // 0=Peso  1=Sanitario  2=Inventario
+  int _selectedPeriod = 1; // 0=Semana 1=Mes 2=Trimestre 3=Año
 
   static const _periods = ['Semana', 'Mes', 'Trimestre', 'Año'];
 
-  static const _lotes = [
-    ('Lote Norte', 420.0, 1),
-    ('Lote Sur', 375.0, 1),
-    ('Lote Este', 342.0, 1),
-  ];
+  // ── Datos cargados desde Supabase ─────────────────────────────────────────
+  List<_LoteStat> _lotesStats = [];
+  List<_RazaStat> _razaStats = [];
+  List<_SanitarioStat> _sanitStats = [];
+  int _totalAnimales = 0;
+  int _totalControles = 0;
+  double _pesoPromGlobal = 0;
+
+  bool _isLoading = true;
 
   @override
+  void initState() {
+    super.initState();
+    _cargarDatos();
+  }
+
+  // ── Fecha de corte según período ──────────────────────────────────────────
+  DateTime get _fechaDesde {
+    final now = DateTime.now();
+    switch (_selectedPeriod) {
+      case 0:
+        return now.subtract(const Duration(days: 7));
+      case 1:
+        return now.subtract(const Duration(days: 30));
+      case 2:
+        return now.subtract(const Duration(days: 90));
+      case 3:
+        return now.subtract(const Duration(days: 365));
+      default:
+        return now.subtract(const Duration(days: 30));
+    }
+  }
+
+  String get _periodoLabel {
+    switch (_selectedPeriod) {
+      case 0:
+        return 'Últimos 7 días';
+      case 1:
+        return 'Últimos 30 días';
+      case 2:
+        return 'Últimos 3 meses';
+      case 3:
+        return 'Último año';
+      default:
+        return 'Últimos 30 días';
+    }
+  }
+
+  // ── Carga principal ───────────────────────────────────────────────────────
+  Future<void> _cargarDatos() async {
+    setState(() => _isLoading = true);
+    try {
+      final desde = _fechaDesde.toIso8601String().substring(0, 10);
+
+      // ── Animales con su lote y pesos dentro del período ──────────────────
+      final animData = await _db
+          .from('animales')
+          .select(
+            'id, raza, id_lote, lotes(nombre), registro_peso(peso, fecha)',
+          );
+
+      final animales = animData as List;
+      _totalAnimales = animales.length;
+
+      // Peso promedio global (último peso de cada animal dentro del período)
+      final Map<String, List<double>> pesosPorLote = {};
+      final Map<String, String> nombrePorLote = {};
+      final todosLosPesos = <double>[];
+
+      for (final a in animales) {
+        final idLote = a['id_lote'] as String?;
+        final loteObj = a['lotes'];
+        final nombreL = loteObj != null
+            ? (loteObj['nombre'] as String? ?? 'Sin lote')
+            : 'Sin lote';
+        if (idLote != null) nombrePorLote[idLote] = nombreL;
+
+        final pesos = (a['registro_peso'] as List?)
+            ?.where((p) => (p['fecha'] as String).compareTo(desde) >= 0)
+            .toList();
+        if (pesos == null || pesos.isEmpty) continue;
+
+        pesos.sort(
+          (x, y) => (y['fecha'] as String).compareTo(x['fecha'] as String),
+        );
+        final ultimo = (pesos.first['peso'] as num).toDouble();
+        todosLosPesos.add(ultimo);
+
+        if (idLote != null) {
+          pesosPorLote.putIfAbsent(idLote, () => []).add(ultimo);
+        }
+      }
+
+      _pesoPromGlobal = todosLosPesos.isEmpty
+          ? 0
+          : todosLosPesos.reduce((a, b) => a + b) / todosLosPesos.length;
+
+      // ── Stats por lote ────────────────────────────────────────────────────
+      _lotesStats = pesosPorLote.entries.map((e) {
+        final avg = e.value.reduce((a, b) => a + b) / e.value.length;
+        return _LoteStat(
+          nombre: nombrePorLote[e.key] ?? e.key.substring(0, 6),
+          pesoPromedio: avg,
+          animales: e.value.length,
+        );
+      }).toList()..sort((a, b) => b.pesoPromedio.compareTo(a.pesoPromedio));
+
+      // ── Distribución por raza ─────────────────────────────────────────────
+      final Map<String, int> razaCount = {};
+      for (final a in animales) {
+        final raza = (a['raza'] as String?)?.trim() ?? 'Otra';
+        razaCount[raza] = (razaCount[raza] ?? 0) + 1;
+      }
+      _razaStats =
+          razaCount.entries
+              .map((e) => _RazaStat(raza: e.key, cantidad: e.value))
+              .toList()
+            ..sort((a, b) => b.cantidad.compareTo(a.cantidad));
+
+      // ── Controles sanitarios en el período ───────────────────────────────
+      final sanitData = await _db
+          .from('registro_sanitario')
+          .select('tipo_control')
+          .gte('fecha', desde);
+
+      _totalControles = (sanitData as List).length;
+
+      final Map<String, int> sanitCount = {};
+      for (final s in sanitData) {
+        final tipo = (s['tipo_control'] as String?)?.trim() ?? 'Otro';
+        sanitCount[tipo] = (sanitCount[tipo] ?? 0) + 1;
+      }
+      _sanitStats =
+          sanitCount.entries
+              .map((e) => _SanitarioStat(tipo: e.key, cantidad: e.value))
+              .toList()
+            ..sort((a, b) => b.cantidad.compareTo(a.cantidad));
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── UI ────────────────────────────────────────────────────────────────────
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Reportes',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.green,
+    return RefreshIndicator(
+      onRefresh: _cargarDatos,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reportes',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.green,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Análisis y estadísticas del ganado',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: AppColors.green),
+                  tooltip: 'Actualizar',
+                  onPressed: _cargarDatos,
+                ),
+              ],
             ),
+            const SizedBox(height: 18),
+
+            // ── Selector de tipo de reporte ───────────────────────────────
+            Row(
+              children: [
+                _reportCard(
+                  index: 0,
+                  title: 'Reporte de Peso',
+                  subtitle: 'Peso promedio por lote',
+                  icon: Icons.bar_chart,
+                ),
+                const SizedBox(width: 12),
+                _reportCard(
+                  index: 1,
+                  title: 'Reporte Sanitario',
+                  subtitle: 'Vacunas y tratamientos',
+                  icon: Icons.medical_services_outlined,
+                ),
+                const SizedBox(width: 12),
+                _reportCard(
+                  index: 2,
+                  title: 'Inventario General',
+                  subtitle: 'Distribución por raza y lote',
+                  icon: Icons.picture_as_pdf_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ── Selector de período ───────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Período',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _periodoLabel,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: List.generate(_periods.length, (i) {
+                      final active = _selectedPeriod == i;
+                      return Padding(
+                        padding: EdgeInsets.only(right: i < 3 ? 8 : 0),
+                        child: ChoiceChip(
+                          label: Text(_periods[i]),
+                          selected: active,
+                          onSelected: (_) {
+                            setState(() => _selectedPeriod = i);
+                            _cargarDatos(); // ← recarga con el nuevo período
+                          },
+                          selectedColor: AppColors.green,
+                          labelStyle: TextStyle(
+                            color: active ? Colors.white : Colors.black87,
+                            fontSize: 12,
+                          ),
+                          backgroundColor: Colors.grey.shade100,
+                          side: BorderSide.none,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Contenido del reporte seleccionado ────────────────────────
+            if (_isLoading)
+              const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              _buildReporteActual(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Despacha al reporte correcto ──────────────────────────────────────────
+  Widget _buildReporteActual() {
+    switch (_selectedReport) {
+      case 0:
+        return _buildReportePeso();
+      case 1:
+        return _buildReporteSanitario();
+      case 2:
+        return _buildInventarioGeneral();
+      default:
+        return _buildReportePeso();
+    }
+  }
+
+  // ── REPORTE DE PESO ───────────────────────────────────────────────────────
+  Widget _buildReportePeso() {
+    if (_lotesStats.isEmpty) {
+      return _emptyState(
+        icon: Icons.bar_chart,
+        msg: 'Sin datos de peso para el período seleccionado',
+        sub: 'Registra pesos en animales asociados a un lote',
+      );
+    }
+
+    final maxY =
+        (_lotesStats
+                    .map((e) => e.pesoPromedio)
+                    .reduce((a, b) => a > b ? a : b) *
+                1.3)
+            .ceilToDouble();
+
+    return Column(
+      children: [
+        // Gráfica de barras
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Análisis y estadísticas del ganado',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-          const SizedBox(height: 18),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _reportCard(
-                index: 0,
-                title: 'Reporte de Peso',
-                subtitle: 'Análisis de peso promedio por lote',
-                icon: Icons.bar_chart,
+              const Text(
+                'Peso Promedio por Lote',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
-              const SizedBox(width: 12),
-              _reportCard(
-                index: 1,
-                title: 'Reporte Sanitario',
-                subtitle: 'Vacunas y tratamientos aplicados',
-                icon: Icons.medical_services_outlined,
+              const Text(
+                'Peso (kg)',
+                style: TextStyle(color: Colors.grey, fontSize: 11),
               ),
-              const SizedBox(width: 12),
-              _reportCard(
-                index: 2,
-                title: 'Inventario General',
-                subtitle: 'Distribución de animales por raza y lote',
-                icon: Icons.picture_as_pdf_outlined,
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 220,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: maxY,
+                    barGroups: _lotesStats
+                        .asMap()
+                        .entries
+                        .map(
+                          (e) => BarChartGroupData(
+                            x: e.key,
+                            barRods: [
+                              BarChartRodData(
+                                toY: e.value.pesoPromedio,
+                                color: AppColors.green,
+                                width: 48,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                    titlesData: FlTitlesData(
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (v, _) {
+                            final i = v.toInt();
+                            if (i < 0 || i >= _lotesStats.length) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                _lotesStats[i].nombre,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: maxY / 4,
+                          reservedSize: 36,
+                          getTitlesWidget: (v, _) => Text(
+                            v.toInt().toString(),
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    gridData: const FlGridData(drawVerticalLine: false),
+                    borderData: FlBorderData(show: false),
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Período',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+
+        // Tarjetas por lote
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _lotesStats.asMap().entries.map((e) {
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: e.key < _lotesStats.length - 1 ? 12 : 0,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Últimos 30 días',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: List.generate(_periods.length, (i) {
-                    final active = _selectedPeriod == i;
-                    return Padding(
-                      padding: EdgeInsets.only(right: i < 3 ? 8 : 0),
-                      child: ChoiceChip(
-                        label: Text(_periods[i]),
-                        selected: active,
-                        onSelected: (_) =>
-                            setState(() => _selectedPeriod = i),
-                        selectedColor: AppColors.green,
-                        labelStyle: TextStyle(
-                          color: active ? Colors.white : Colors.black87,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE6E6E6)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        e.value.nombre,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${e.value.pesoPromedio.toStringAsFixed(1)} kg',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.green,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${e.value.animales} animales',
+                        style: const TextStyle(
                           fontSize: 12,
-                        ),
-                        backgroundColor: Colors.grey.shade100,
-                        side: BorderSide.none,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                      ),
-                    );
-                  }),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Peso Promedio por Lote',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Peso (kg)',
-                  style: TextStyle(color: Colors.grey, fontSize: 11),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 220,
-                  child: BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: 600,
-                      barGroups: List.generate(
-                        _lotes.length,
-                        (i) => BarChartGroupData(
-                          x: i,
-                          barRods: [
-                            BarChartRodData(
-                              toY: _lotes[i].$2,
-                              color: AppColors.green,
-                              width: 48,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(4),
-                              ),
-                            ),
-                          ],
+                          color: Colors.grey,
                         ),
                       ),
-                      titlesData: FlTitlesData(
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (v, _) {
-                              final i = v.toInt();
-                              if (i < 0 || i >= _lotes.length) {
-                                return const SizedBox.shrink();
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  _lotes[i].$1,
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            interval: 150,
-                            reservedSize: 36,
-                            getTitlesWidget: (v, _) => Text(
-                              v.toInt().toString(),
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        ),
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                      ),
-                      gridData: const FlGridData(drawVerticalLine: false),
-                      borderData: FlBorderData(show: false),
-                    ),
+                    ],
                   ),
                 ),
-              ],
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  // ── REPORTE SANITARIO ─────────────────────────────────────────────────────
+  Widget _buildReporteSanitario() {
+    return Column(
+      children: [
+        // Resumen
+        Row(
+          children: [
+            Expanded(
+              child: _statTile(
+                'Total controles',
+                '$_totalControles',
+                Icons.medical_services,
+                AppColors.green,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: _lotes
-                .map(
-                  (l) => Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        right: l.$1 != _lotes.last.$1 ? 12 : 0,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE6E6E6)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statTile(
+                'Tipos distintos',
+                '${_sanitStats.length}',
+                Icons.category_outlined,
+                AppColors.blue,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_sanitStats.isEmpty)
+          _emptyState(
+            icon: Icons.medical_services_outlined,
+            msg: 'Sin controles sanitarios en el período',
+            sub: 'Registra controles desde "Control sanitario"',
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Controles por tipo',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                ..._sanitStats.map((s) {
+                  final pct = _totalControles > 0
+                      ? s.cantidad / _totalControles
+                      : 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              l.$1,
+                              s.tipo,
                               style: const TextStyle(
-                                fontWeight: FontWeight.bold,
                                 fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(height: 8),
                             Text(
-                              '${l.$2.toInt()} kg',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.green,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${l.$3} animales',
+                              '${s.cantidad} (${(pct * 100).toStringAsFixed(0)}%)',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -247,13 +580,268 @@ class _ReportsPageState extends State<ReportsPage> {
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct,
+                            minHeight: 8,
+                            backgroundColor: Colors.grey.shade200,
+                            color: AppColors.green,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                )
-                .toList(),
+                  );
+                }),
+              ],
+            ),
           ),
-          const SizedBox(height: 80),
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  // ── INVENTARIO GENERAL ────────────────────────────────────────────────────
+  Widget _buildInventarioGeneral() {
+    final colors = [
+      AppColors.green,
+      AppColors.blue,
+      AppColors.brown,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+    ];
+
+    return Column(
+      children: [
+        // Resumen
+        Row(
+          children: [
+            Expanded(
+              child: _statTile(
+                'Total animales',
+                '$_totalAnimales',
+                Icons.pets,
+                AppColors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statTile(
+                'Lotes activos',
+                '${_lotesStats.length}',
+                Icons.grid_view,
+                AppColors.blue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statTile(
+                'Peso prom. global',
+                _pesoPromGlobal > 0
+                    ? '${_pesoPromGlobal.toStringAsFixed(1)} kg'
+                    : '— kg',
+                Icons.monitor_weight,
+                AppColors.brown,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_razaStats.isEmpty)
+          _emptyState(
+            icon: Icons.pets,
+            msg: 'Sin animales registrados',
+            sub: 'Registra animales desde "Registro de Animales"',
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Pie chart
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Distribución por Raza',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 200,
+                        child: PieChart(
+                          PieChartData(
+                            sections: _razaStats.asMap().entries.map((e) {
+                              final color = colors[e.key % colors.length];
+                              final pct = _totalAnimales > 0
+                                  ? e.value.cantidad / _totalAnimales * 100
+                                  : 0.0;
+                              return PieChartSectionData(
+                                value: e.value.cantidad.toDouble(),
+                                color: color,
+                                title:
+                                    '${e.value.raza}\n${pct.toStringAsFixed(0)}%',
+                                titleStyle: TextStyle(
+                                  fontSize: 10,
+                                  color: color,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                titlePositionPercentageOffset: 1.4,
+                                radius: 70,
+                              );
+                            }).toList(),
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Lista por raza
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Animales por Raza',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._razaStats.asMap().entries.map((e) {
+                        final color = colors[e.key % colors.length];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  e.value.raza,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              Text(
+                                '${e.value.cantidad} animal${e.value.cantidad != 1 ? 'es' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        const SizedBox(height: 80),
+      ],
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  Widget _statTile(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState({
+    required IconData icon,
+    required String msg,
+    required String sub,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 48, color: Colors.grey.shade300),
+          const SizedBox(height: 12),
+          Text(
+            msg,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(sub, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );

@@ -136,7 +136,7 @@ class _DashboardBodyState extends State<DashboardBody> {
       if (animales.isNotEmpty) {
         _actividad.add(
           _ActividadItem(
-            icon: Icons.pets,
+            icon: Icons.agriculture,
             color: AppColors.green,
             title:
                 '$_totalAnimales animal${_totalAnimales != 1 ? 'es' : ''} registrado${_totalAnimales != 1 ? 's' : ''}',
@@ -146,7 +146,7 @@ class _DashboardBodyState extends State<DashboardBody> {
       } else {
         _actividad.add(
           _ActividadItem(
-            icon: Icons.pets,
+            icon: Icons.agriculture,
             color: AppColors.green,
             title: 'No hay animales registrados',
             sub: 'Registra tu primer animal',
@@ -256,7 +256,7 @@ class _DashboardBodyState extends State<DashboardBody> {
                     child: StatCard(
                       label: 'Total Animales',
                       value: '$_totalAnimales',
-                      icon: Icons.pets,
+                      icon: Icons.agriculture,
                       color: AppColors.green,
                     ),
                   ),
