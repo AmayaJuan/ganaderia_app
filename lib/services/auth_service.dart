@@ -60,7 +60,6 @@ class AuthService {
       return 'Se borró tabla usuario, pero falló admin.deleteUser: $e';
     }
 
-
     // 3) Si el usuario eliminado era el actual, cerrar sesión.
     if (_currentUser?.id == uid) {
       await logout();
@@ -70,21 +69,13 @@ class AuthService {
   }
 
   Future<void> init() async {
-    final session = _supabase.auth.currentSession;
-    if (session != null) {
-      await _loadCurrentUser(session.user.id);
-      if (_currentUser != null) return;
-    }
+    // Forzar siempre pantalla de login (sin auto-login):
+    // si existe sesión guardada en el dispositivo, la cerramos al arrancar.
+    // Esto evita que el usuario quede autenticado automáticamente.
+    await _supabase.auth.signOut();
+    _currentUser = null;
 
-    var error = await login(AdminCredentials.email, AdminCredentials.password);
-    if (error == null) return;
-
-    if (_isInvalidCredentials(error)) {
-      error = await _bootstrapAdmin();
-      if (error == null) {
-        await login(AdminCredentials.email, AdminCredentials.password);
-      }
-    }
+    // Si en algún caso quieres soportar sesión persistida, comenta las 2 líneas de arriba.
   }
 
   Future<void> _loadCurrentUser(String uid) async {
@@ -124,45 +115,6 @@ class AuthService {
       // Ya existe o RLS; se intenta cargar de nuevo.
     }
     await _loadCurrentUser(user.id);
-  }
-
-  Future<void> _ensureAdminProfile(User user) async {
-    await _ensureUserProfile(
-      user,
-      nombre: 'Administrador',
-      email: AdminCredentials.email,
-      role: UserRole.admin,
-    );
-  }
-
-  Future<String?> _bootstrapAdmin() async {
-    try {
-      final res = await _supabase.auth.signUp(
-        email: AdminCredentials.email,
-        password: AdminCredentials.password,
-        data: const {'nombre': 'Administrador'},
-      );
-
-      final user = res.user;
-      if (user == null) {
-        return 'No se pudo crear la cuenta de administrador.';
-      }
-
-      if (res.session != null) {
-        await _ensureAdminProfile(user);
-        if (_currentUser != null) return null;
-        return _missingProfileMessage(AdminCredentials.email);
-      }
-
-      return _emailNotConfirmedMessage(AdminCredentials.email);
-    } on AuthException catch (e) {
-      if (e.message.toLowerCase().contains('already registered')) {
-        return _emailNotConfirmedMessage(AdminCredentials.email);
-      }
-      return _mapAuthError(e, email: AdminCredentials.email);
-    } catch (_) {
-      return 'Error al preparar la cuenta de administrador.';
-    }
   }
 
   Future<String?> register({
@@ -333,12 +285,6 @@ class AuthService {
       'Entra como admin y créalo en Configuración, o ejecuta en SQL Editor:\n'
       "INSERT INTO usuario (id, nombre, email, rol) SELECT id, 'Nombre', '$email', "
       "'productor_ganadero' FROM auth.users WHERE email = '$email';";
-
-  bool _isInvalidCredentials(String message) {
-    final lower = message.toLowerCase();
-    return lower.contains('incorrect') ||
-        (lower.contains('invalid') && lower.contains('credential'));
-  }
 
   String _mapAuthError(AuthException e, {required String email}) {
     final code = e.code?.toLowerCase() ?? '';
