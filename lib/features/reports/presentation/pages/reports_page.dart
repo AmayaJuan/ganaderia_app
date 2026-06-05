@@ -622,7 +622,7 @@ class _ReportsPageState extends State<ReportsPage> {
               child: _statTile(
                 'Total animales',
                 '$_totalAnimales',
-                Icons.pets,
+                Icons.agriculture,
                 AppColors.green,
               ),
             ),
