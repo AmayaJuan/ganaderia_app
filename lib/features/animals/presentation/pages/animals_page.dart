@@ -487,7 +487,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
   void _mostrarFormulario({_Animal? animal}) {
     final idAnimalCtrl = TextEditingController(text: animal?.idAnimal ?? '');
-    final _kRazas = const [
+    final kRazas = const [
       'Brahman',
       'Cebú',
       'Angus',
@@ -504,7 +504,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
       'Pardo Suizo',
       'Otro',
     ];
-    String razaVal = _kRazas.contains(animal?.raza) ? animal!.raza : 'Otro';
+    String razaVal = kRazas.contains(animal?.raza) ? animal!.raza : 'Otro';
     // En edición, el campo peso siempre empieza vacío:
     // solo se inserta en registro_peso si el usuario escribe un valor nuevo.
     final pesoCtrl = TextEditingController();
@@ -559,7 +559,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Raza ───────────────────────────────────
                     DropdownButtonFormField<String>(
-                      value: razaVal,
+                      initialValue: razaVal,
                       decoration: InputDecoration(
                         labelText: 'Raza *',
                         prefixIcon: const Icon(Icons.agriculture),
@@ -567,7 +567,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      items: _kRazas
+                      items: kRazas
                           .map(
                             (r) => DropdownMenuItem(value: r, child: Text(r)),
                           )
@@ -582,7 +582,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Sexo ───────────────────────────────────
                     DropdownButtonFormField<String>(
-                      value: sexo,
+                      initialValue: sexo,
                       decoration: InputDecoration(
                         labelText: 'Sexo *',
                         border: OutlineInputBorder(
@@ -602,7 +602,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
 
                     // ── Lote (sentinel fix) ────────────────────
                     DropdownButtonFormField<String>(
-                      value: loteVal,
+                      initialValue: loteVal,
                       decoration: InputDecoration(
                         labelText: 'Lote',
                         prefixIcon: const Icon(Icons.folder_outlined),
@@ -1116,7 +1116,7 @@ class _HistorialPesosDialogState extends State<_HistorialPesosDialog> {
                   Expanded(
                     child: ListView.separated(
                       itemCount: _registros.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final r = _registros[i];
                         final peso = (r['peso'] as num).toDouble();
