@@ -15,7 +15,7 @@ class _LoteModel {
   String nombre;
   String descripcion;
   int animales;
-  bool expandido;
+  bool expandido = false;   // ← agregar = false
   List<_AnimalResumen> listaAnimales;
   bool cargandoAnimales;
 
@@ -24,10 +24,9 @@ class _LoteModel {
     required this.nombre,
     required this.descripcion,
     this.animales = 0,
-    this.expandido = false,
-    this.listaAnimales = const [],
     this.cargandoAnimales = false,
-  });
+    List<_AnimalResumen> listaAnimales = const [],
+  }) : listaAnimales = listaAnimales;
 }
 
 class _AnimalResumen {
