@@ -652,7 +652,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
         if (_razaStats.isEmpty)
           _emptyState(
-            icon: Icons.pets,
+            icon: Icons.agriculture,
             msg: 'Sin animales registrados',
             sub: 'Registra animales desde "Registro de Animales"',
           )

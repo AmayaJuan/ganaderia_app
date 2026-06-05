@@ -346,7 +346,7 @@ class _LotesPageState extends State<LotesPage> {
                             Row(
                               children: [
                                 const Icon(
-                                  Icons.pets,
+                                  Icons.agriculture,
                                   size: 14,
                                   color: Colors.grey,
                                 ),
