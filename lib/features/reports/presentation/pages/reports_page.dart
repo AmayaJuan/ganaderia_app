@@ -48,6 +48,15 @@ class _ReportsPageState extends State<ReportsPage> {
   List<_LoteStat> _lotesStats = [];
   List<_RazaStat> _razaStats = [];
   List<_SanitarioStat> _sanitStats = [];
+
+  /// Registros completos para la tabla "Actividad Sanitaria".
+  /// Estructura esperada por fila (mapeo simple desde Supabase):
+  /// {
+  ///   tipo, observaciones, fecha, proximo_control?,
+  ///   animales: { raza, id_animal }
+  /// }
+  List<Map<String, dynamic>> _sanitRegistros = [];
+
   int _totalAnimales = 0;
   int _totalControles = 0;
   double _pesoPromGlobal = 0;
@@ -163,16 +172,22 @@ class _ReportsPageState extends State<ReportsPage> {
               .toList()
             ..sort((a, b) => b.cantidad.compareTo(a.cantidad));
 
-      // ── Controles sanitarios en el período ───────────────────────────────
+      // ── Actividad sanitaria en el período ────────────────────────────────
+      // Nota: usamos select con relación a animales para poder mostrar "Animal".
+      // Si en tu schema el join se llama distinto, ajustaremos el alias luego.
       final sanitData = await _db
           .from('registro_sanitario')
-          .select('tipo, fecha, id_animal')
-          .gte('fecha', desde);
+          .select(
+            'tipo, fecha, observaciones, proximo_control, id_animal, animales(raza, id_animal)',
+          )
+          .gte('fecha', desde)
+          .order('fecha', ascending: false);
 
       _totalControles = (sanitData as List).length;
+      _sanitRegistros = List<Map<String, dynamic>>.from(sanitData);
 
       final Map<String, int> sanitCount = {};
-      for (final s in sanitData) {
+      for (final s in sanitData as List) {
         final tipo = (s['tipo'] as String?)?.trim() ?? 'Otro';
         sanitCount[tipo] = (sanitCount[tipo] ?? 0) + 1;
       }
@@ -314,8 +329,91 @@ class _ReportsPageState extends State<ReportsPage> {
                 height: 200,
                 child: Center(child: CircularProgressIndicator()),
               )
-            else
+            else ...[
               _buildReporteActual(),
+              const SizedBox(height: 20),
+
+              // ── Botones exportar ──────────────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Exportación a PDF próximamente disponible',
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Exportar a PDF'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Exportación a Excel próximamente disponible',
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.table_chart),
+                      label: const Text('Exportar a Excel'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Nota offline
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Nota: Los reportes se pueden exportar cuando haya conexión a internet. '
+                        'En modo offline, los datos se guardan localmente y se sincronizarán '
+                        'automáticamente al conectarse.',
+                        style: TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
           ],
         ),
       ),
@@ -530,13 +628,8 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
         const SizedBox(height: 16),
 
-        if (_sanitStats.isEmpty)
-          _emptyState(
-            icon: Icons.medical_services_outlined,
-            msg: 'Sin controles sanitarios en el período',
-            sub: 'Registra controles desde "Control sanitario"',
-          )
-        else
+        // Barras por tipo
+        if (_sanitStats.isNotEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -596,7 +689,148 @@ class _ReportsPageState extends State<ReportsPage> {
                 }),
               ],
             ),
+          )
+        else
+          _emptyState(
+            icon: Icons.medical_services_outlined,
+            msg: 'Sin controles sanitarios en el período',
+            sub: 'Registra controles desde "Control sanitario"',
           ),
+
+        const SizedBox(height: 16),
+
+        // Tabla Actividad Sanitaria
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Actividad Sanitaria',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+              const Divider(height: 1),
+              _sanitRegistros.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Text(
+                          'No hay registros sanitarios para el período seleccionado',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(
+                          Colors.grey.shade50,
+                        ),
+                        columns: const [
+                          DataColumn(
+                            label: Text(
+                              'Tipo',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Animal',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Descripción',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Fecha',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                        rows: _sanitRegistros.map((r) {
+                          final tipo = (r['tipo'] as String?)?.trim() ?? '—';
+                          final obs = (r['observaciones'] as String?)?.trim();
+                          final fechaRaw = (r['fecha'] as String?)?.trim();
+                          final fecha = fechaRaw == null || fechaRaw.isEmpty
+                              ? null
+                              : fechaRaw;
+
+                          final animalesObj = r['animales'];
+                          final raza = animalesObj is Map
+                              ? (animalesObj['raza'] as String?)
+                              : null;
+                          final idAnimal =
+                              r['id_animal'] ??
+                              (animalesObj is Map ? animalesObj['id'] : null);
+
+                          final nombreAnimal =
+                              (raza ?? '').toString().isNotEmpty
+                              ? '${raza ?? '—'}${idAnimal != null ? ' (${idAnimal.toString()})' : ''}'
+                              : (idAnimal != null
+                                    ? '— (${idAnimal.toString()})'
+                                    : '—');
+
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: tipo == 'Vacunación'
+                                        ? AppColors.green.withValues(alpha: 0.1)
+                                        : AppColors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    tipo,
+                                    style: TextStyle(
+                                      color: tipo == 'Vacunación'
+                                          ? AppColors.green
+                                          : AppColors.blue,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(nombreAnimal)),
+                              DataCell(
+                                SizedBox(
+                                  width: 220,
+                                  child: Text(
+                                    obs ?? '—',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Text(fecha == null ? '—' : _fmtFecha(fecha)),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 80),
       ],
     );
@@ -777,6 +1011,11 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  static String _fmtFecha(String iso) {
+    final p = iso.split('-');
+    return p.length == 3 ? '${p[2]}/${p[1]}/${p[0]}' : iso;
+  }
+
   Widget _statTile(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
