@@ -378,16 +378,6 @@ class _WeightPageState extends State<WeightPage> {
     );
   }
 
-  String _labelAnimalGrafica() {
-    if (_animalSeleccionado == null) return '—';
-    return _animales
-        .firstWhere(
-          (a) => a.id == _animalSeleccionado,
-          orElse: () => _Animal(id: '', label: '—'),
-        )
-        .label;
-  }
-
   // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
