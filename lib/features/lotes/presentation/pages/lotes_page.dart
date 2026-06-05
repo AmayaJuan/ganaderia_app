@@ -15,16 +15,15 @@ class _LoteModel {
   String nombre;
   String descripcion;
   int animales;
-  bool expandido = false;   // ← agregar = false
+  bool expandido = false; // ← agregar = false
   List<_AnimalResumen> listaAnimales;
-  bool cargandoAnimales;
+  bool cargandoAnimales = false;
 
   _LoteModel({
     required this.id,
     required this.nombre,
     required this.descripcion,
     this.animales = 0,
-    this.cargandoAnimales = false,
     List<_AnimalResumen> listaAnimales = const [],
   }) : listaAnimales = listaAnimales;
 }
