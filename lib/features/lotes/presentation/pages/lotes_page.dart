@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
-/// Vista de gestión de lotes — persistencia en Supabase.
 class LotesPage extends StatefulWidget {
   const LotesPage({super.key});
 
@@ -16,12 +15,34 @@ class _LoteModel {
   String nombre;
   String descripcion;
   int animales;
+  bool expandido;
+  List<_AnimalResumen> listaAnimales;
+  bool cargandoAnimales;
 
   _LoteModel({
     required this.id,
     required this.nombre,
     required this.descripcion,
     this.animales = 0,
+    this.expandido = false,
+    this.listaAnimales = const [],
+    this.cargandoAnimales = false,
+  });
+}
+
+class _AnimalResumen {
+  final String id;
+  final String? idAnimal;
+  final String raza;
+  final String sexo;
+  final double? ultimoPeso;
+
+  _AnimalResumen({
+    required this.id,
+    this.idAnimal,
+    required this.raza,
+    required this.sexo,
+    this.ultimoPeso,
   });
 }
 
@@ -39,7 +60,6 @@ class _LotesPageState extends State<LotesPage> {
   Future<void> _cargarLotes() async {
     setState(() => _isLoading = true);
     try {
-      // Traer lotes con conteo de animales asociados
       final data = await _db
           .from('lotes')
           .select('id, nombre, descripcion, animales(count)')
@@ -65,6 +85,51 @@ class _LotesPageState extends State<LotesPage> {
         setState(() => _isLoading = false);
         _mostrarError('Error al cargar lotes: $e');
       }
+    }
+  }
+
+  Future<void> _toggleAnimales(_LoteModel lote) async {
+    if (lote.expandido) {
+      setState(() => lote.expandido = false);
+      return;
+    }
+    // Expandir y cargar animales
+    setState(() {
+      lote.expandido = true;
+      lote.cargandoAnimales = true;
+    });
+    try {
+      final data = await _db
+          .from('animales')
+          .select('id, id_animal, raza, sexo, registro_peso(peso, fecha)')
+          .eq('id_lote', lote.id)
+          .order('id_animal');
+
+      final lista = (data as List).map((a) {
+        double? ultimoPeso;
+        final pesos = a['registro_peso'] as List?;
+        if (pesos != null && pesos.isNotEmpty) {
+          pesos.sort(
+            (x, y) => (y['fecha'] as String).compareTo(x['fecha'] as String),
+          );
+          ultimoPeso = (pesos.first['peso'] as num).toDouble();
+        }
+        return _AnimalResumen(
+          id: a['id'] as String,
+          idAnimal: a['id_animal'] as String?,
+          raza: a['raza'] as String? ?? '—',
+          sexo: a['sexo'] as String? ?? '—',
+          ultimoPeso: ultimoPeso,
+        );
+      }).toList();
+
+      setState(() {
+        lote.listaAnimales = lista;
+        lote.cargandoAnimales = false;
+      });
+    } catch (e) {
+      setState(() => lote.cargandoAnimales = false);
+      _mostrarError('Error al cargar animales: $e');
     }
   }
 
@@ -103,19 +168,16 @@ class _LotesPageState extends State<LotesPage> {
     }
   }
 
-  Future<void> _eliminarLote(String id, String nombre) async {
+  Future<void> _eliminarLote(String id) async {
     try {
       await _db.from('lotes').delete().eq('id', id);
       await _cargarLotes();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Lote eliminado'),
+          const SnackBar(
+            content: Text('Lote eliminado'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
           ),
         );
       }
@@ -135,26 +197,14 @@ class _LotesPageState extends State<LotesPage> {
     );
   }
 
-  void _verAnimalesDelLote(_LoteModel lote) {
-    showDialog(
-      context: context,
-      builder: (ctx) => _AnimalesLoteDialog(
-        db: _db,
-        loteId: lote.id,
-        loteNombre: lote.nombre,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Encabezado ────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: Row(
@@ -207,6 +257,8 @@ class _LotesPageState extends State<LotesPage> {
           ),
         ),
         const SizedBox(height: 20),
+
+        // ── Lista / Vacío ─────────────────────────────────────────────────
         Expanded(
           child: _lotes.isEmpty
               ? Center(
@@ -254,146 +306,313 @@ class _LotesPageState extends State<LotesPage> {
                     ],
                   ),
                 )
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.2,
-                        ),
-                    itemCount: _lotes.length,
-                    itemBuilder: (ctx, i) {
-                      final lote = _lotes[i];
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.greenLight,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.grass,
-                                    color: AppColors.green,
-                                    size: 20,
-                                  ),
-                                ),
-                                const Spacer(),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: AppColors.blue,
-                                    size: 18,
-                                  ),
-                                  onPressed: () =>
-                                      _mostrarFormulario(lote: lote),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => _confirmarEliminar(lote),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              lote.nombre,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (lote.descripcion.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                lote.descripcion,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                            const Spacer(),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.agriculture,
-                                  size: 14,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${lote.animales} animales',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const Spacer(),
-                                InkWell(
-                                  onTap: () => _verAnimalesDelLote(lote),
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Row(
-                                    children: const [
-                                      Text(
-                                        'Ver animales',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Icon(
-                                        Icons.keyboard_arrow_right,
-                                        color: AppColors.green,
-                                        size: 16,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  itemCount: _lotes.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (ctx, i) => _buildLoteCard(_lotes[i]),
                 ),
         ),
       ],
     );
   }
 
+  // ── Tarjeta de lote con panel expandible ──────────────────────────────────
+  Widget _buildLoteCard(_LoteModel lote) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // ── Cabecera del lote ───────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.greenLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.grass,
+                    color: AppColors.green,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        lote.nombre,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (lote.descripcion.isNotEmpty)
+                        Text(
+                          lote.descripcion,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: AppColors.blue, size: 18),
+                  onPressed: () => _mostrarFormulario(lote: lote),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                  onPressed: () => _confirmarEliminar(lote),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Pie: conteo + botón Ver animales ────────────────────────────
+          InkWell(
+            onTap: () => _toggleAnimales(lote),
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(14),
+              bottomRight: Radius.circular(14),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.greenLight.withValues(alpha: 0.5),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(14),
+                  bottomRight: Radius.circular(14),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.agriculture, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${lote.animales} animal${lote.animales != 1 ? 'es' : ''}',
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const Spacer(),
+                  Text(
+                    lote.expandido ? 'Ocultar animales' : 'Ver animales',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: lote.expandido ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: AppColors.green,
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Panel expandible con lista de animales ──────────────────────
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 250),
+            crossFadeState: lote.expandido
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            firstChild: const SizedBox.shrink(),
+            secondChild: _buildPanelAnimales(lote),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanelAnimales(_LoteModel lote) {
+    if (lote.cargandoAnimales) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (lote.listaAnimales.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, size: 16, color: Colors.grey.shade400),
+            const SizedBox(width: 8),
+            const Text(
+              'No hay animales en este lote',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Cabecera de la tabla
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(
+                width: 60,
+                child: Text(
+                  'ID',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Raza',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  'Sexo',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  'Último peso',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Filas de animales
+        ...lote.listaAnimales.map(
+          (a) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Colors.grey.shade100)),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 60,
+                  child: Text(
+                    a.idAnimal ?? '—',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.green,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(a.raza, style: const TextStyle(fontSize: 13)),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: a.sexo == 'Macho'
+                          ? Colors.blue.withValues(alpha: 0.1)
+                          : Colors.purple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      a.sexo,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: a.sexo == 'Macho' ? Colors.blue : Colors.purple,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    a.ultimoPeso != null
+                        ? '${a.ultimoPeso!.toStringAsFixed(1)} kg'
+                        : '—',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: a.ultimoPeso != null
+                          ? AppColors.green
+                          : Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  // ── Formulario crear/editar lote ──────────────────────────────────────────
   void _mostrarFormulario({_LoteModel? lote}) {
     final nombreCtrl = TextEditingController(text: lote?.nombre ?? '');
     final descCtrl = TextEditingController(text: lote?.descripcion ?? '');
@@ -509,233 +728,12 @@ class _LotesPageState extends State<LotesPage> {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
-              await _eliminarLote(lote.id, lote.nombre);
+              await _eliminarLote(lote.id);
             },
             child: const Text('Eliminar'),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _AnimalesLoteDialog extends StatefulWidget {
-  final dynamic db;
-  final String loteId;
-  final String loteNombre;
-
-  const _AnimalesLoteDialog({
-    required this.db,
-    required this.loteId,
-    required this.loteNombre,
-  });
-
-  @override
-  State<_AnimalesLoteDialog> createState() => _AnimalesLoteDialogState();
-}
-
-class _AnimalesLoteDialogState extends State<_AnimalesLoteDialog> {
-  List<Map<String, dynamic>> _animales = [];
-  bool _cargando = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    setState(() => _cargando = true);
-    try {
-      final data = await widget.db
-          .from('animales')
-          .select(
-            'id_animal, raza, sexo, fecha_nacimiento, registro_peso(peso, fecha)',
-          )
-          .eq('id_lote', widget.loteId)
-          .order('raza');
-
-      setState(() {
-        _animales = List<Map<String, dynamic>>.from(data);
-        _cargando = false;
-      });
-    } catch (e) {
-      setState(() => _cargando = false);
-    }
-  }
-
-  String _edad(String? fechaNacimiento) {
-    if (fechaNacimiento == null) return '—';
-    final nac = DateTime.tryParse(fechaNacimiento);
-    if (nac == null) return '—';
-    final diff = DateTime.now().difference(nac);
-    final years = (diff.inDays / 365).floor();
-    final months = ((diff.inDays % 365) / 30).floor();
-    if (years > 0) return '$years año${years > 1 ? 's' : ''}';
-    return '$months mes${months != 1 ? 'es' : ''}';
-  }
-
-  String _ultimoPeso(Map<String, dynamic> animal) {
-    final pesos = animal['registro_peso'] as List?;
-    if (pesos == null || pesos.isEmpty) return '—';
-    pesos.sort(
-      (a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String),
-    );
-    return '${(pesos.first['peso'] as num).toStringAsFixed(1)} kg';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: [
-          const Icon(Icons.grass, color: AppColors.green),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.loteNombre,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Text(
-                  'Animales en este lote',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 500,
-        height: 360,
-        child: _cargando
-            ? const Center(child: CircularProgressIndicator())
-            : _animales.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.agriculture,
-                      size: 48,
-                      color: Colors.grey.shade300,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No hay animales en este lote',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              )
-            : SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    AppColors.greenLight,
-                  ),
-                  columns: const [
-                    DataColumn(
-                      label: Text(
-                        'ID',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Raza',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Sexo',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Edad',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Peso',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                  rows: _animales.map((a) {
-                    final isMacho = a['sexo'] == 'Macho';
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            a['id_animal'] ?? '—',
-                            style: const TextStyle(
-                              color: AppColors.green,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        DataCell(Text(a['raza'] ?? '—')),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isMacho
-                                  ? const Color(0xFFE6F1FB)
-                                  : const Color(0xFFFCEBF9),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              a['sexo'] ?? '—',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isMacho
-                                    ? const Color(0xFF185FA5)
-                                    : const Color(0xFF8B0066),
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataCell(Text(_edad(a['fecha_nacimiento']))),
-                        DataCell(
-                          Text(
-                            _ultimoPeso(a),
-                            style: const TextStyle(
-                              color: AppColors.green,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cerrar'),
-        ),
-      ],
     );
   }
 }
