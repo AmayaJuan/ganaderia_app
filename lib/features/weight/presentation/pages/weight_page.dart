@@ -200,7 +200,7 @@ class _WeightPageState extends State<WeightPage> {
                 children: [
                   // Animal
                   DropdownButtonFormField<String>(
-                    value: animalId,
+                    initialValue: animalId,
                     decoration: InputDecoration(
                       labelText: 'Animal *',
                       prefixIcon: const Icon(Icons.pets_outlined),
