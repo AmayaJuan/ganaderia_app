@@ -626,7 +626,11 @@ class _AnimalesLoteDialogState extends State<_AnimalesLoteDialog> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.pets, size: 48, color: Colors.grey.shade300),
+                    Icon(
+                      Icons.agriculture,
+                      size: 48,
+                      color: Colors.grey.shade300,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
                       'No hay animales en este lote',
