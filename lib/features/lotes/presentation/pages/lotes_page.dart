@@ -135,6 +135,17 @@ class _LotesPageState extends State<LotesPage> {
     );
   }
 
+  void _verAnimalesDelLote(_LoteModel lote) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _AnimalesLoteDialog(
+        db: _db,
+        loteId: lote.id,
+        loteNombre: lote.nombre,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -348,18 +359,27 @@ class _LotesPageState extends State<LotesPage> {
                                   ),
                                 ),
                                 const Spacer(),
-                                const Text(
-                                  'Ver animales',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.green,
-                                    fontWeight: FontWeight.bold,
+                                InkWell(
+                                  onTap: () => _verAnimalesDelLote(lote),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Row(
+                                    children: const [
+                                      Text(
+                                        'Ver animales',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(
+                                        Icons.keyboard_arrow_right,
+                                        color: AppColors.green,
+                                        size: 16,
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: AppColors.green,
-                                  size: 16,
                                 ),
                               ],
                             ),
@@ -495,6 +515,223 @@ class _LotesPageState extends State<LotesPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AnimalesLoteDialog extends StatefulWidget {
+  final dynamic db;
+  final String loteId;
+  final String loteNombre;
+
+  const _AnimalesLoteDialog({
+    required this.db,
+    required this.loteId,
+    required this.loteNombre,
+  });
+
+  @override
+  State<_AnimalesLoteDialog> createState() => _AnimalesLoteDialogState();
+}
+
+class _AnimalesLoteDialogState extends State<_AnimalesLoteDialog> {
+  List<Map<String, dynamic>> _animales = [];
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() => _cargando = true);
+    try {
+      final data = await widget.db
+          .from('animales')
+          .select(
+            'id_animal, raza, sexo, fecha_nacimiento, registro_peso(peso, fecha)',
+          )
+          .eq('id_lote', widget.loteId)
+          .order('raza');
+
+      setState(() {
+        _animales = List<Map<String, dynamic>>.from(data);
+        _cargando = false;
+      });
+    } catch (e) {
+      setState(() => _cargando = false);
+    }
+  }
+
+  String _edad(String? fechaNacimiento) {
+    if (fechaNacimiento == null) return '—';
+    final nac = DateTime.tryParse(fechaNacimiento);
+    if (nac == null) return '—';
+    final diff = DateTime.now().difference(nac);
+    final years = (diff.inDays / 365).floor();
+    final months = ((diff.inDays % 365) / 30).floor();
+    if (years > 0) return '$years año${years > 1 ? 's' : ''}';
+    return '$months mes${months != 1 ? 'es' : ''}';
+  }
+
+  String _ultimoPeso(Map<String, dynamic> animal) {
+    final pesos = animal['registro_peso'] as List?;
+    if (pesos == null || pesos.isEmpty) return '—';
+    pesos.sort(
+      (a, b) => (b['fecha'] as String).compareTo(a['fecha'] as String),
+    );
+    return '${(pesos.first['peso'] as num).toStringAsFixed(1)} kg';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          const Icon(Icons.grass, color: AppColors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.loteNombre,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Animales en este lote',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        height: 360,
+        child: _cargando
+            ? const Center(child: CircularProgressIndicator())
+            : _animales.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.pets, size: 48, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No hay animales en este lote',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(
+                    AppColors.greenLight,
+                  ),
+                  columns: const [
+                    DataColumn(
+                      label: Text(
+                        'ID',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Raza',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Sexo',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Edad',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Peso',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                  rows: _animales.map((a) {
+                    final isMacho = a['sexo'] == 'Macho';
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            a['id_animal'] ?? '—',
+                            style: const TextStyle(
+                              color: AppColors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        DataCell(Text(a['raza'] ?? '—')),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isMacho
+                                  ? const Color(0xFFE6F1FB)
+                                  : const Color(0xFFFCEBF9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              a['sexo'] ?? '—',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isMacho
+                                    ? const Color(0xFF185FA5)
+                                    : const Color(0xFF8B0066),
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(Text(_edad(a['fecha_nacimiento']))),
+                        DataCell(
+                          Text(
+                            _ultimoPeso(a),
+                            style: const TextStyle(
+                              color: AppColors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
     );
   }
 }
