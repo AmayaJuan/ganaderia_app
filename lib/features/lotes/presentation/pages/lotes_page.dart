@@ -24,8 +24,7 @@ class _LoteModel {
     required this.nombre,
     required this.descripcion,
     this.animales = 0,
-    this.listaAnimales = const [],
-  });
+  }) : listaAnimales = const [];
 }
 
 class _AnimalResumen {

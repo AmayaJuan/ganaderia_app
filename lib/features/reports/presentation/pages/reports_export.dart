@@ -1,6 +1,5 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 
-import 'dart:typed_data';
 
 // NOTE: este archivo mantiene una exportación funcional mínima.
 
