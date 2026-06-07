@@ -57,7 +57,7 @@ Future<void> _exportarPDF_impl({
 
   final bytes = await doc.save();
 
-  final pdfBytes = bytes is Uint8List ? bytes.toList() : (bytes as List<int>);
+  final pdfBytes = bytes.toList();
 
   await descargarPDF(
     pdfBytes,
@@ -149,5 +149,5 @@ String _slugFecha(DateTime dt) {
   final y = dt.year.toString().padLeft(4, '0');
   final m = dt.month.toString().padLeft(2, '0');
   final d = dt.day.toString().padLeft(2, '0');
-  return '${y}${m}${d}';
+  return '$y$m$d';
 }
