@@ -1,4 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
+import '../../../../core/utils/export_helper.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:excel/excel.dart' as xl;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -203,6 +208,165 @@ class _ReportsPageState extends State<ReportsPage> {
     }
   }
 
+  // ── Exportación (PDF/Excel) ─────────────────────────────────────────────
+ Future<void> _exportarPDF() async {
+  final pdf = pw.Document();
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      build: (pw.Context ctx) {
+        final widgets = <pw.Widget>[
+          pw.Text('Reporte GanaderíaApp',
+              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+          pw.Text(_periodoLabel,
+              style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey)),
+          pw.SizedBox(height: 20),
+        ];
+
+        if (_selectedReport == 0) {
+          widgets.addAll([
+            pw.Text('Peso Promedio por Lote',
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Lote', 'Peso Promedio (kg)', 'Animales'],
+              data: _lotesStats.map((l) => [
+                l.nombre, l.pesoPromedio.toStringAsFixed(1), '${l.animales}',
+              ]).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+            ),
+          ]);
+        } else if (_selectedReport == 1) {
+          widgets.addAll([
+            pw.Text('Actividad Sanitaria',
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 10),
+            if (_sanitRegistros.isEmpty)
+              pw.Text('Sin registros en el período.')
+            else
+              pw.Table.fromTextArray(
+                headers: ['Tipo', 'Animal', 'Descripción', 'Fecha'],
+                data: _sanitRegistros.map((r) {
+                  final animal = r['animales'];
+                  final raza = animal is Map ? (animal['raza'] as String? ?? '—') : '—';
+                  final idAnim = animal is Map ? (animal['id_animal'] as String?) : null;
+                  return [
+                    r['tipo'] ?? '—',
+                    idAnim != null ? '$raza ($idAnim)' : raza,
+                    r['observaciones'] ?? '—',
+                    _fmtFecha(r['fecha'] ?? ''),
+                  ];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+              ),
+          ]);
+        } else {
+          widgets.addAll([
+            pw.Text('Distribución por Raza',
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Raza', 'Cantidad'],
+              data: _razaStats.map((r) => [r.raza, '${r.cantidad}']).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+            ),
+          ]);
+        }
+        return widgets;
+      },
+    ),
+  );
+
+  final bytes = await pdf.save();
+  await descargarPDF(bytes, 'reporte_ganaderia.pdf');
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('PDF exportado correctamente'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+Future<void> _exportarExcel() async {
+  final excel = xl.Excel.createExcel();
+  late xl.Sheet sheet;
+
+  if (_selectedReport == 0) {
+    excel.rename('Sheet1', 'Peso por Lote');
+    sheet = excel['Peso por Lote'];
+    sheet.appendRow([
+      xl.TextCellValue('Lote'),
+      xl.TextCellValue('Peso Promedio (kg)'),
+      xl.TextCellValue('Animales'),
+    ]);
+    for (final l in _lotesStats) {
+      sheet.appendRow([
+        xl.TextCellValue(l.nombre),
+        xl.DoubleCellValue(l.pesoPromedio),
+        xl.IntCellValue(l.animales),
+      ]);
+    }
+  } else if (_selectedReport == 1) {
+    excel.rename('Sheet1', 'Actividad Sanitaria');
+    sheet = excel['Actividad Sanitaria'];
+    sheet.appendRow([
+      xl.TextCellValue('Tipo'),
+      xl.TextCellValue('Animal'),
+      xl.TextCellValue('Descripción'),
+      xl.TextCellValue('Fecha'),
+      xl.TextCellValue('Próximo Control'),
+    ]);
+    for (final r in _sanitRegistros) {
+      final animal = r['animales'];
+      final raza = animal is Map ? (animal['raza'] as String? ?? '—') : '—';
+      final idAnim = animal is Map ? (animal['id_animal'] as String?) : null;
+      final pc = r['proximo_control'] as String?;
+      sheet.appendRow([
+        xl.TextCellValue(r['tipo'] ?? '—'),
+        xl.TextCellValue(idAnim != null ? '$raza ($idAnim)' : raza),
+        xl.TextCellValue(r['observaciones'] ?? '—'),
+        xl.TextCellValue(_fmtFecha(r['fecha'] ?? '')),
+        xl.TextCellValue(pc != null ? _fmtFecha(pc) : '—'),
+      ]);
+    }
+  } else {
+    excel.rename('Sheet1', 'Inventario');
+    sheet = excel['Inventario'];
+    sheet.appendRow([
+      xl.TextCellValue('Raza'),
+      xl.TextCellValue('Cantidad'),
+    ]);
+    for (final r in _razaStats) {
+      sheet.appendRow([
+        xl.TextCellValue(r.raza),
+        xl.IntCellValue(r.cantidad),
+      ]);
+    }
+  }
+
+  final bytes = excel.save();
+  if (bytes == null) return;
+
+  await descargarExcel(bytes, 'reporte_ganaderia.xlsx');
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Excel exportado correctamente'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
   // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -338,16 +502,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Exportación a PDF próximamente disponible',
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
+                      onPressed: _exportarPDF,
                       icon: const Icon(Icons.picture_as_pdf),
                       label: const Text('Exportar a PDF'),
                       style: ElevatedButton.styleFrom(
@@ -363,16 +518,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Exportación a Excel próximamente disponible',
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
+                      onPressed: _exportarExcel,
                       icon: const Icon(Icons.table_chart),
                       label: const Text('Exportar a Excel'),
                       style: ElevatedButton.styleFrom(
