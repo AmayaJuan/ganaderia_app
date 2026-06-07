@@ -200,7 +200,7 @@ class _HomePageState extends State<HomePage> {
                       Expanded(child: _getBody(_selectedIndex)),
                     ],
                   )
-                : DashboardBody(onQuickAction: _onQuickAction),
+                : _getBody(_selectedIndex),
           ),
         ],
       ),
