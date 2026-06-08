@@ -98,41 +98,40 @@ class _HealthPageState extends State<HealthPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Encabezado ──────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // ── Encabezado (responsive) ───────────────────
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Control Sanitario',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.green,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Gestión de vacunas y tratamientos',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
+                    const Text(
+                      'Control Sanitario',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.green,
+                      ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _mostrarFormulario,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Nuevo Registro'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Gestión de vacunas y tratamientos',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _mostrarFormulario,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Nuevo Registro'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
                       ),
                     ),
@@ -140,34 +139,32 @@ class _HealthPageState extends State<HealthPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // ── Stat cards ──────────────────────────────────
-                Row(
+                // ── Stat cards (responsive) ────────────────────
+                GridView.count(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.vaccines,
-                        iconColor: AppColors.green,
-                        label: 'Total Vacunas',
-                        value: '$_totalVacunas',
-                      ),
+                    _StatCard(
+                      icon: Icons.vaccines,
+                      iconColor: AppColors.green,
+                      label: 'Total Vacunas',
+                      value: '$_totalVacunas',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.medical_services,
-                        iconColor: Colors.blue,
-                        label: 'Tratamientos',
-                        value: '$_totalTratamientos',
-                      ),
+                    _StatCard(
+                      icon: Icons.medical_services,
+                      iconColor: Colors.blue,
+                      label: 'Tratamientos',
+                      value: '$_totalTratamientos',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.warning_amber,
-                        iconColor: const Color(0xFF9A6A00),
-                        label: 'Próximos',
-                        value: '$_proximosControles',
-                      ),
+                    _StatCard(
+                      icon: Icons.warning_amber,
+                      iconColor: const Color(0xFF9A6A00),
+                      label: 'Próximos',
+                      value: '$_proximosControles',
                     ),
                   ],
                 ),
@@ -786,38 +783,34 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Row(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: iconColor, size: 22),
+            child: Icon(icon, color: iconColor, size: 18),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey, fontSize: 10),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
