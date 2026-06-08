@@ -206,20 +206,44 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: isWide
           ? null
-          : BottomNavigationBar(
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppColors.green,
-              unselectedItemColor: Colors.grey,
-              currentIndex: _selectedIndex,
-              onTap: (i) => setState(() => _selectedIndex = i),
-              items: _navItems
-                  .map(
-                    (e) => BottomNavigationBarItem(
-                      icon: Icon(e.icon),
-                      label: e.label,
+          : SizedBox(
+              height: 72,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: BottomNavigationBar(
+                      type: BottomNavigationBarType.fixed,
+                      selectedItemColor: AppColors.green,
+                      unselectedItemColor: Colors.grey,
+                      currentIndex: _selectedIndex,
+                      onTap: (i) => setState(() => _selectedIndex = i),
+                      items: _navItems
+                          .map(
+                            (e) => BottomNavigationBarItem(
+                              icon: Icon(e.icon),
+                              label: e.label,
+                            ),
+                          )
+                          .toList(),
                     ),
-                  )
-                  .toList(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+                    child: IconButton(
+                      tooltip: 'Cerrar sesión',
+                      icon: const Icon(Icons.logout, color: Colors.red),
+                      onPressed: () async {
+                        await AuthService.instance.logout();
+                        if (!context.mounted) return;
+                        Navigator.pushReplacementNamed(
+                          context,
+                          AppRoutes.login,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
     );
   }

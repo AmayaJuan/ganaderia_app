@@ -130,11 +130,11 @@ class _AnimalsPageState extends State<AnimalsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Encabezado ──
+        // ── Encabezado (responsive) ──
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,6 +153,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   IconButton(
@@ -160,6 +161,7 @@ class _AnimalsPageState extends State<AnimalsPage> {
                     onPressed: _cargarDatos,
                     tooltip: 'Actualizar',
                   ),
+                  const Spacer(),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.green,
